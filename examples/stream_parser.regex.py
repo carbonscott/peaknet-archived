@@ -62,18 +62,22 @@ class StreamParser:
         regex_dict['peak_found'] = regex.compile( 
             r"""
             (?x)
-            (?:
-                (?>
-                    (?&FLOAT) # Match a floating number
-                )
-                \s+           # Match whitespace at least once
-            ){4}              # Match the whole construct 4 times
+            (?>
+                (?:
+                    (?>
+                        (?&FLOAT) # Match a floating number
+                    )
+                    \s+           # Match whitespace at least once
+                ){4}              # Match the whole construct 4 times
+            )
 
-            (?&DET_PANEL)     # Match a detector panel
+            (?&DET_PANEL)         # Match a detector panel
 
             (?(DEFINE)
                 (?<FLOAT>
-                    ([-+]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][-+]?\d+)?)
+                    [-+]?         # Match a sign
+                    (?>\d+)       # Match integer part
+                    (?:\.\d*)?    # Match decimal part
                 )
                 (?<DET_PANEL>
                     (?: [0-9A-Za-z]+ $ )
@@ -97,7 +101,9 @@ class StreamParser:
 
             (?(DEFINE)
                 (?<FLOAT>
-                    [-+]?(?:\d+(?:\.\d*)?|\.\d+)
+                    [-+]?         # Match a sign
+                    (?>\d+)       # Match integer part
+                    (?:\.\d*)?    # Match decimal part
                 )
                 (?<DET_PANEL>
                     (?: [0-9A-Za-z]+ $ )
@@ -107,30 +113,32 @@ class StreamParser:
         )
 
         # Parse colon item in event...
+        # DISCARD!!! Don't match absolute words with regex
         regex_dict['chunk_colon'] = regex.compile(
             r"""
             (?x)
             (?>
-                (?P<KEY>
+                (?P<KEY>     # Match a keyword below
                     (?:Image \s filename)
                 |   (?:Event)
                 )
             )
-            :   # Match a colon
+            :                # Match a colon
             (?P<VALUE>.+ $)  # Match the event number
             """
         )
 
         # Parse equal sign item in event...
+        # DISCARD!!! Don't match absolute words with regex
         regex_dict['chunk_eq'] = regex.compile(
             r"""
             (?x)
             (?>
-                (?P<KEY>
+                (?P<KEY>     # Match a keyword below
                     indexed_by
                 )
             )
-            \s = \s
+            \s = \s          # Match a equal sign with blank spaces on both sides
             (?P<VALUE>.+ $)  # Match the event number
             """
         )
@@ -139,11 +147,10 @@ class StreamParser:
         regex_dict['geom'] = regex.compile(
             r"""
             (?x)
-            (?>
-                (?> (?&DET_PANEL) ) / (?&COORD)
-            )
-            \s = \s
-            (?&VALUE)
+            # Match the pattern below
+            (?> (?&DET_PANEL) ) / (?&COORD)
+            \s = \s    # Match a equal sign with blank spaces on both sides
+            (?&VALUE)  # Match the value of the coordinate
 
             (?(DEFINE)
                 (?<DET_PANEL>
@@ -172,7 +179,7 @@ class StreamParser:
 
         # Keep results in match_dict...
         match_dict = {
-            'geom'         : None,
+            'geom'         : [],
             'chunk'        : {}
         }
 
@@ -190,6 +197,7 @@ class StreamParser:
                 # Strip out preceding or trailing blank spaces...
                 line = line.strip()
 
+                # Saving geom at the beginning of the file...
                 # Match a geom object...
                 m = regex_dict['geom'].match(line)
                 if m is not None:
@@ -200,10 +208,9 @@ class StreamParser:
                     value = capture_dict['VALUE'][0]
 
                     # Save values...
-                    if match_dict['geom'] is None:
-                        match_dict['geom'] = [(panel, coord, int(value))]
-                    else:
-                        match_dict['geom'].append((panel, coord, int(value)))
+                    match_dict['geom'].append((panel, coord, int(value)))
+
+                    continue
 
                 # Match filename or image in a chunk
                 m = regex_dict['chunk_colon'].match(line)
@@ -221,6 +228,8 @@ class StreamParser:
                         event_crystfel = v[v.rfind('/') + 1:]
                         event_crystfel = int(event_crystfel)
 
+                    continue
+
                 # Match the indexed_by item...
                 m = regex_dict['chunk_eq'].match(line)
                 if m is not None:
@@ -232,6 +241,7 @@ class StreamParser:
                     # Is this chunk indexed???
                     if v != 'none':
                         save_chunk_ok = True
+                        continue
 
                 # This chunk is indexed...
                 if save_chunk_ok:
@@ -272,6 +282,8 @@ class StreamParser:
                                       ['peak_found']   \
                                       [panel].append((x, y))
 
+                        continue
+
                     # Match indexed peaks...
                     m = regex_dict['peak_indexed'].match(line)
                     if m is not None:
@@ -310,6 +322,8 @@ path_stream = '/reg/data/ana15/cxi/cxig3514/scratch/cwang31/psocake/r0041/cxig35
 ## path_stream = '/reg/data/ana15/cxi/cxig3514/scratch/cwang31/psocake/r0041/test4.stream'
 ## path_stream = '/reg/data/ana15/cxi/cxig3514/scratch/cwang31/psocake/r0041/test.stream'
 ## path_stream = '/reg/data/ana03/scratch/cwang31/pf/cxic0415_0101.test.stream'
+## path_stream = '/reg/data/ana03/scratch/cwang31/pf/streams/test.stream'
+## path_stream = '/reg/data/ana03/scratch/cwang31/pf/streams/multicrystal.stream'
 config_stream_parser = ConfigParam( path_stream = path_stream )
 stream_parser = StreamParser(config_stream_parser)
 stream_parser.parse()

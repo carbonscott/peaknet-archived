@@ -62,12 +62,11 @@ class StreamParser:
         regex_dict['peak_found'] = regex.compile( 
             r"""
             (?x)
-            \s*?              # Match whitespace or None
             (?:
                 (?>
                     (?&FLOAT) # Match a floating number
                 )
-                \s+?          # Match whitespace at least once
+                \s+           # Match whitespace at least once
             ){4}              # Match the whole construct 4 times
 
             (?&DET_PANEL)     # Match a detector panel
@@ -77,7 +76,7 @@ class StreamParser:
                     ([-+]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][-+]?\d+)?)
                 )
                 (?<DET_PANEL>
-                    (?: [0-9A-Za-z]+ )
+                    (?: [0-9A-Za-z]+ $ )
                 )
             )
             """
@@ -87,66 +86,52 @@ class StreamParser:
         regex_dict['peak_indexed'] = regex.compile( 
             r"""
             (?x)
-            \s*?              # Match whitespace or None
             (?:
                 (?>
                     (?&FLOAT) # Match a floating number
                 )
-                \s+?          # Match whitespace at least once
+                \s+           # Match whitespace at least once
             ){9}              # Match the whole construct 4 times
 
             (?&DET_PANEL)     # Match a detector panel
 
             (?(DEFINE)
                 (?<FLOAT>
-                    ([-+]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][-+]?\d+)?)
+                    [-+]?(?:\d+(?:\.\d*)?|\.\d+)
                 )
                 (?<DET_PANEL>
-                    (?: [0-9A-Za-z]+ )
+                    (?: [0-9A-Za-z]+ $ )
                 )
             )
             """
         )
 
         # Parse colon item in event...
-        regex_dict['event_colon_dict'] = regex.compile(
+        regex_dict['chunk_colon'] = regex.compile(
             r"""
             (?x)
             (?>
-                (?P<EVENT_KEY>  # Match the keyword
+                (?P<KEY>
                     (?:Image \s filename)
                 |   (?:Event)
-                |   (?:Image \s serial \s number)
                 )
-                :   # Match a colon
             )
-            (?P<EVENT_VALUE>.+)  # Match the event number
+            :   # Match a colon
+            (?P<VALUE>.+ $)  # Match the event number
             """
         )
 
         # Parse equal sign item in event...
-        regex_dict['event_eq_dict'] = regex.compile(
+        regex_dict['chunk_eq'] = regex.compile(
             r"""
             (?x)
             (?>
-                (?P<EVENT_KEY>  # Match the keyword
-                    (?:hit                              )
-                |   (?:indexed_by                       )
-                |   (?:photon_energy_eV                 )
-                |   (?:beam_divergence                  )
-                |   (?:beam_bandwidth                   )
-                |   (?:hdf5/LCLS/detector_1/EncoderValue)
-                |   (?:hdf5/LCLS/photon_energy_eV       )
-                |   (?:average_camera_length            )
-                |   (?:num_peaks                        )
-                |   (?:num_saturated_peaks              )
-                |   (?:peak_resolution                  )
+                (?P<KEY>
+                    indexed_by
                 )
-                \s
-                =   # Match a equal sign
-                \s
             )
-            (?P<EVENT_VALUE>.+)  # Match the event number
+            \s = \s
+            (?P<VALUE>.+ $)  # Match the event number
             """
         )
 
@@ -155,18 +140,14 @@ class StreamParser:
             r"""
             (?x)
             (?>
-                (?&DET_PANEL)
-                /
-                (?&COORD)
+                (?> (?&DET_PANEL) ) / (?&COORD)
             )
-            \s
-            =
-            \s
+            \s = \s
             (?&VALUE)
 
             (?(DEFINE)
                 (?<DET_PANEL>
-                    [0-9a-zA-Z]+?
+                    [0-9a-zA-Z]+
                 )
                 (?<COORD>
                     (?:min_fs)
@@ -174,7 +155,7 @@ class StreamParser:
                 |   (?:max_fs)
                 |   (?:max_ss)
                 )
-                (?<VALUE> [0-9]+ )
+                (?<VALUE> [0-9]+ $)
             )
             """
         )
@@ -186,35 +167,139 @@ class StreamParser:
         '''
         Return a dictionary of matches that does ... .
         '''
+        # Get all the regex for string matching...
         regex_dict = self.regex_dict
 
-        # Start parsing a stream file by chunks...
+        # Keep results in match_dict...
+        match_dict = {
+            'geom'         : None,
+            'chunk'        : {}
+        }
+
+        # Define some variables to hold values within a chunk...
+        filename = None
+        event_crystfel = None
+
+        # State variable to decide if a chunk should be saved...
+        save_chunk_ok = False
+
+        # Parsing a stream file...
         path_stream = self.path_stream
         with open(path_stream,'r') as fh:
             for line in fh:
+                # Strip out preceding or trailing blank spaces...
                 line = line.strip()
 
-                m = regex_dict['geom'].search(line)
+                # Match a geom object...
+                m = regex_dict['geom'].match(line)
                 if m is not None:
-                    import pdb; pdb.set_trace()
+                    # Fetch values...
+                    capture_dict = m.capturesdict()
+                    panel = capture_dict['DET_PANEL'][0]
+                    coord = capture_dict['COORD'][0]
+                    value = capture_dict['VALUE'][0]
 
-                m = regex_dict['event_colon_dict'].match(line)
+                    # Save values...
+                    if match_dict['geom'] is None:
+                        match_dict['geom'] = [(panel, coord, int(value))]
+                    else:
+                        match_dict['geom'].append((panel, coord, int(value)))
+
+                # Match filename or image in a chunk
+                m = regex_dict['chunk_colon'].match(line)
                 if m is not None:
-                    import pdb; pdb.set_trace()
+                    # Fetch values...
+                    capture_dict = m.capturesdict()
+                    k, v = capture_dict['KEY'][0], \
+                           capture_dict['VALUE'][0]
 
-                m = regex_dict['event_eq_dict'].match(line)
+                    # Save them temperarily...
+                    if   k == 'Image filename':
+                        filename = v
+                        save_chunk_ok = False
+                    elif k == 'Event':
+                        event_crystfel = v[v.rfind('/') + 1:]
+                        event_crystfel = int(event_crystfel)
+
+                # Match the indexed_by item...
+                m = regex_dict['chunk_eq'].match(line)
                 if m is not None:
-                    import pdb; pdb.set_trace()
+                    # Fetch values...
+                    capture_dict = m.capturesdict()
+                    k, v = capture_dict['KEY'][0], \
+                           capture_dict['VALUE'][0]
 
-                m = regex_dict['peak_found'].match(line)
-                if m is not None:
-                    import pdb; pdb.set_trace()
+                    # Is this chunk indexed???
+                    if v != 'none':
+                        save_chunk_ok = True
 
-                m = regex_dict['peak_indexed'].match(line)
-                if m is not None:
-                    import pdb; pdb.set_trace()
+                # This chunk is indexed...
+                if save_chunk_ok:
+                    # Initialize data structure (dict) for saving information...
+                    if not filename in match_dict['chunk']:
+                        match_dict['chunk'][filename] = {}
 
+                    if not event_crystfel in match_dict['chunk'][filename]:
+                        match_dict['chunk'][filename][event_crystfel] = {
+                            'peak_found'   : {},
+                            'peak_indexed' : {},
+                        }
 
+                    # Match found peaks...
+                    m = regex_dict['peak_found'].match(line)
+                    if m is not None:
+                        # Fetch values...
+                        capture_dict = m.capturesdict()
+                        x = float(capture_dict['FLOAT'][0])
+                        y = float(capture_dict['FLOAT'][1])
+                        panel = capture_dict['DET_PANEL'][0]
+
+                        # Save values...
+                        if  not panel in               \
+                            match_dict['chunk']        \
+                                      [filename]       \
+                                      [event_crystfel] \
+                                      ['peak_found']:
+                            match_dict['chunk']        \
+                                      [filename]       \
+                                      [event_crystfel] \
+                                      ['peak_found']   \
+                                      [panel] = [(x, y)]
+                        else:
+                            match_dict['chunk']        \
+                                      [filename]       \
+                                      [event_crystfel] \
+                                      ['peak_found']   \
+                                      [panel].append((x, y))
+
+                    # Match indexed peaks...
+                    m = regex_dict['peak_indexed'].match(line)
+                    if m is not None:
+                        # Fetch values...
+                        capture_dict = m.capturesdict()
+                        x = float(capture_dict['FLOAT'][-2])
+                        y = float(capture_dict['FLOAT'][-1])
+                        panel = capture_dict['DET_PANEL'][0]
+
+                        # Save values...
+                        if  not panel in               \
+                            match_dict['chunk']        \
+                                      [filename]       \
+                                      [event_crystfel] \
+                                      ['peak_indexed']:
+                            match_dict['chunk']        \
+                                      [filename]       \
+                                      [event_crystfel] \
+                                      ['peak_indexed']   \
+                                      [panel] = [(x, y)]
+                        else:
+                            match_dict['chunk']        \
+                                      [filename]       \
+                                      [event_crystfel] \
+                                      ['peak_indexed']   \
+                                      [panel].append((x, y))
+
+        self.match_dict = match_dict
 
 
 

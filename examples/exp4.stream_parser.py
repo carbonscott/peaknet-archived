@@ -133,6 +133,8 @@ class VizCheetahGeom:
         im.set_cmap('gray')
         plt.colorbar(im, cax = ax_cbar, orientation="vertical", pad = 0.05)
 
+        return None
+
 
     def plot_peaks(self):
         peak_dict = self.peak_dict
@@ -243,6 +245,13 @@ class VizCheetahGeom:
         im = ax_img.imshow(mask, vmin = 0, vmax = 1)
         im.set_cmap('gray')
         ax_img.invert_yaxis()
+
+        b_offset = 10
+        y_bmin, x_bmin = 0, 0
+        y_bmax, x_bmax = size_y, size_x
+        ax_img.set_xlim([x_bmin - b_offset, x_bmax + b_offset])
+        ax_img.set_ylim([y_bmin - b_offset, y_bmax + b_offset])
+
 
 
     def adjust_margin(self):

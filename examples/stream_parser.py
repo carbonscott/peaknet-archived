@@ -2,11 +2,7 @@
 # -*- coding: utf-8 -*-
 
 import os
-import re
-import logging
-import pickle
-
-logger = logging.getLogger(__name__)
+import regex
 
 class ConfigParam:
 
@@ -53,8 +49,124 @@ class StreamParser:
             "REFLECTION_END"   : "End of reflections",
         }
 
-        self.geom_dict = { 'dim' : {}, 'panel' : {} }
-        self.peak_dict = {}
+        self.regex_dict = self.init_regex()
+
+        # Keep results in match_dict...
+        self.match_dict = {}
+
+
+    def init_regex(self):
+        regex_dict = {}
+
+        # Parse peaks found...
+        regex_dict['peak_found'] = regex.compile( 
+            r"""
+            (?x)
+            (?>
+                (?:
+                    (?>
+                        (?&FLOAT) # Match a floating number
+                    )
+                    \s+           # Match whitespace at least once
+                ){4}              # Match the whole construct 4 times
+            )
+
+            (?&DET_PANEL)         # Match a detector panel
+
+            (?(DEFINE)
+                (?<FLOAT>
+                    [-+]?         # Match a sign
+                    (?>\d+)       # Match integer part
+                    (?:\.\d*)?    # Match decimal part
+                )
+                (?<DET_PANEL>
+                    (?: [0-9A-Za-z]+ $ )
+                )
+            )
+            """
+        )
+
+        # Parse peaks found...
+        regex_dict['peak_indexed'] = regex.compile( 
+            r"""
+            (?x)
+            (?:
+                (?>
+                    (?&FLOAT) # Match a floating number
+                )
+                \s+           # Match whitespace at least once
+            ){9}              # Match the whole construct 4 times
+
+            (?&DET_PANEL)     # Match a detector panel
+
+            (?(DEFINE)
+                (?<FLOAT>
+                    [-+]?         # Match a sign
+                    (?>\d+)       # Match integer part
+                    (?:\.\d*)?    # Match decimal part
+                )
+                (?<DET_PANEL>
+                    (?: [0-9A-Za-z]+ $ )
+                )
+            )
+            """
+        )
+
+        # Parse colon item in event...
+        # DISCARD!!! Don't match absolute words with regex
+        regex_dict['chunk_colon'] = regex.compile(
+            r"""
+            (?x)
+            (?>
+                (?P<KEY>     # Match a keyword below
+                    (?:Image \s filename)
+                |   (?:Event)
+                )
+            )
+            :                # Match a colon
+            (?P<VALUE>.+ $)  # Match the event number
+            """
+        )
+
+        # Parse equal sign item in event...
+        regex_dict['chunk_eq'] = regex.compile(
+            r"""
+            (?x)
+            (?>
+                (?P<KEY>     # Match a keyword below
+                    indexed_by
+                )
+            )
+            \s = \s          # Match a equal sign with blank spaces on both sides
+            (?P<VALUE>.+ $)  # Match the event number
+            """
+        )
+
+        # Parse detector gemoetry...
+        regex_dict['geom'] = regex.compile(
+            r"""
+            (?x)
+            # Match the pattern below
+            (?> (?&DET_PANEL) ) / (?&COORD)
+            \s = \s    # Match a equal sign with blank spaces on both sides
+            (?&VALUE)  # Match the value of the coordinate
+
+            (?(DEFINE)
+                (?<DET_PANEL>
+                    [0-9a-zA-Z]+
+                )
+                (?<COORD>
+                    (?:min_fs)
+                |   (?:min_ss)
+                |   (?:max_fs)
+                |   (?:max_ss)
+                )
+                (?<VALUE> [0-9]+ $)
+            )
+            """
+        )
+
+        return regex_dict
 
 
     def parse(self):
@@ -64,142 +176,183 @@ class StreamParser:
         '''
         # Define state variable for parse/skipping lines...
         is_chunk_found = False
-        save_peak_ok   = False
+        save_chunk_ok  = False
+        save_geom_ok   = True
         in_peaklist    = False
         in_indexedlist = False
         in_geom        = False
 
+        # Get all the regex for string matching...
+        regex_dict = self.regex_dict
+
         # Import marker...
         marker_dict = self.marker_dict
+
+        match_dict = {
+            'geom'         : {},
+            'chunk'        : {},
+        }
 
         # Start parsing a stream file by chunks...
         path_stream = self.path_stream
         with open(path_stream,'r') as fh:
+            # Go through each line...
             for line in fh:
+                # Strip surrounding blank spaces...
                 line = line.strip()
 
-                # To find a new chunk...
-                # Consider chunk is found...
+                # Okay to save geometry???
+                if save_geom_ok:
+                    # Match a geom object...
+                    m = regex_dict['geom'].match(line)
+                    if m is not None:
+                        # Fetch values...
+                        capture_dict = m.capturesdict()
+                        panel = capture_dict['DET_PANEL'][0]
+                        coord = capture_dict['COORD'][0]
+                        value = capture_dict['VALUE'][0]
+
+                        # Save values...
+                        if not panel in match_dict['geom']:
+                            match_dict['geom'][panel] = {
+                                'min_fs' : None,
+                                'min_ss' : None,
+                                'max_fs' : None,
+                                'max_ss' : None,
+                            }
+                        match_dict['geom'][panel][coord] = int(value)
+
+                        continue
+
+                # Locate the beginning and end of a new chunk...
+                # Consider chunk is found
                 if line == marker_dict["CHUNK_START"]: 
                     is_chunk_found = True
-                    save_peak_ok   = False    # ...Don't save any peaks by default
+                    save_chunk_ok  = False    # ...Don't save any peaks by default
+                    save_geom_ok   = False
 
-                # Consider chunk not found at the end of a chunk...
+                # Consider chunk not found at the end of a chunk
                 if line == marker_dict["CHUNK_END"]: is_chunk_found = False
 
-                # Skip parsing statements below if a chunk is not found...
+                # Skip parsing statements below if a chunk is not found
                 if not is_chunk_found: continue
 
-                # To decide whether to save peaks...
-                # Look up filename...
+
+                # Find filename of this chunk...
+                # Look up filename
                 if line.startswith("Image filename: "):
                     filename = line[line.rfind(':') + 1:] # e.g. 'Image filename: /xxx/cxig3514_0041.cxi'
                     filename = filename.strip()
 
-                # Look up event number...
+                # Find event number (only makes sense to crytfel) of this chunk...
                 if line.startswith("Event: "):
-                    event_num = line[line.rfind('/') + 1:] # e.g. 'Event: //17'
-                    event_num = int(event_num)
+                    event_num_crystfel = line[line.rfind('/') + 1:] # e.g. 'Event: //17'
+                    event_num_crystfel = int(event_num_crystfel)
 
-                # Look up indexing status...
+                # Find indexing status of this chunk...
                 if line.startswith("indexed_by"):
                     status_indexing = line[line.rfind('=') + 1:].strip() # e.g. 'indexed_by = none'
 
-                    # Allow peak saving when indexing is successful...
-                    if status_indexing != 'none': save_peak_ok = True
+                    # Allow to save this chunk if index is sucessful...
+                    if status_indexing != 'none': save_chunk_ok = True
 
-                # Don't save any peaks if indexing is not successful...
-                if not save_peak_ok: continue
+                # Don't save this chunk if indexing is not successful...
+                if not save_chunk_ok: continue
 
-                # To save results from events in each file...
+
+                # Ready to save peaks in this chunk...
                 # Save by filename
-                if not filename in self.peak_dict: self.peak_dict[filename] = {}
+                if not filename in match_dict['chunk']: match_dict['chunk'][filename] = {}
 
                 # Save by event number
-                if not event_num in self.peak_dict[filename]:
-                    self.peak_dict[filename][event_num] = {}
+                if not event_num_crystfel in match_dict['chunk'][filename]:
+                    match_dict['chunk'][filename][event_num_crystfel] = {}
 
-                # Find a peak list...
+                # Begin a peak list
                 if line == marker_dict["PEAK_LIST_START"]:
                     in_peaklist = True
                     is_first_line_in_peaklist = True
                     continue
 
-                # Exit a peak list...
+                # Exit a peak list
                 if line == marker_dict["PEAK_LIST_END"]:
                     in_peaklist = False
                     continue
 
-                # To Save peaks in a peak list...
+                # Save peaks in a peak list...
                 if in_peaklist:
-                    # Skip the header...
+                    # Skip the header
                     if is_first_line_in_peaklist:
                         is_first_line_in_peaklist = False
                         continue
 
-                    # Saving...
+                    # Saving
                     dim1, dim2, _, _, panel = line.split()
 
-                    if not panel in self.peak_dict[filename][event_num]: 
-                        self.peak_dict[filename ] \
-                                      [event_num] \
-                                      [panel    ] = { 'found' : [], 'indexed' : [] }
+                    if not panel in match_dict['chunk'][filename][event_num_crystfel]: 
+                        match_dict['chunk'           ] \
+                                  [filename          ] \
+                                  [event_num_crystfel] \
+                                  [panel             ] = { 'found' : [], 'indexed' : [] }
 
-                    self.peak_dict[filename ] \
-                                  [event_num] \
-                                  [panel    ] \
-                                  ['found'  ].append((float(dim1), 
-                                                      float(dim2),))
+                    match_dict['chunk'           ] \
+                              [filename          ] \
+                              [event_num_crystfel] \
+                              [panel             ] \
+                              ['found'           ].append((float(dim1), 
+                                                           float(dim2),))
                     continue
 
-                # Find an indexed list...
+                # Find an indexed list
                 if line == marker_dict["REFLECTION_START"]:
                     in_indexedlist = True
                     is_first_line_in_indexedlist = True
                     continue
 
-                # Exit an indexed list...
+                # Exit an indexed list
                 if line == marker_dict["REFLECTION_END"]:
                     in_indexedlist = False
                     continue
 
-                # To Save peaks in a indexed list...
+                # Save peaks in an indexed list...
                 if in_indexedlist:
-                    # Skip the header...
+                    # Skip the header
                     if is_first_line_in_indexedlist:
                         is_first_line_in_indexedlist = False
                         continue
 
-                    # Saving...
+                    # Saving
                     _, _, _, _, _, _, _, dim1, dim2, panel = line.split()
 
-                    # If the panel doesn't have found peak, skip it...
-                    if not panel in self.peak_dict[filename][event_num]: continue
+                    # If the panel doesn't have found peak, skip it
+                    if not panel in match_dict['chunk'][filename][event_num_crystfel]: continue
 
-                    # Otherwise, save it...
-                    self.peak_dict[filename ] \
-                                  [event_num] \
-                                  [panel    ] \
-                                  ['indexed'].append((float(dim1), 
-                                                      float(dim2),))
+                    # Otherwise, save it
+                    match_dict['chunk'           ] \
+                              [filename          ] \
+                              [event_num_crystfel] \
+                              [panel             ] \
+                              ['indexed'         ].append((float(dim1),
+                                                           float(dim2),))
                     continue
 
+        self.match_dict = match_dict
 
 
 
-# [[[ EXAMPLE ]]]
 
-path_stream = '/reg/data/ana15/cxi/cxig3514/scratch/cwang31/psocake/r0041/cxig3514_0041.stream'
-## path_stream = '/reg/data/ana15/cxi/cxig3514/scratch/cwang31/psocake/r0041/cxig3514_0041_d100.stream'
-## path_stream = '/reg/data/ana15/cxi/cxig3514/scratch/cwang31/psocake/r0041/test2.stream'
-## path_stream = '/reg/data/ana15/cxi/cxig3514/scratch/cwang31/psocake/r0041/test4.stream'
-## path_stream = '/reg/data/ana15/cxi/cxig3514/scratch/cwang31/psocake/r0041/test.stream'
-## path_stream = '/reg/data/ana03/scratch/cwang31/pf/streams/test.stream'
-config_stream_parser = ConfigParam( path_stream = path_stream )
-stream_parser = StreamParser(config_stream_parser)
-stream_parser.parse()
-peak_dict = stream_parser.peak_dict
+class GeomInterpreter:
 
-## fl_peak_dict = 'peak_dict.pickle'
-## with open(fl_peak_dict, 'wb') as fh:
-##     pickle.dump(peak_dict, fh, protocol = pickle.HIGHEST_PROTOCOL)
+    def __init__(self, geom_dict):
+        self.geom_dict = geom_dict
+
+
+    def interpret(self):
+        geom_dict = self.geom_dict
+
+        cheetah_geom_dict = {}
+        for panel, coord_dict in geom_dict.items():
+            x_min, y_min, x_max, y_max = coord_dict.values()
+            cheetah_geom_dict[panel] = (x_min, y_min, x_max, y_max)
+
+        return cheetah_geom_dict

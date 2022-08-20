@@ -67,7 +67,8 @@ class LossValidator:
         for step_id, entry in batch:
             losses_batch = []
 
-            batch_img, batch_mask, batch_metadata = entry
+            ## batch_img, batch_mask, batch_metadata = entry
+            batch_img, batch_mask = entry
             batch_img = batch_img.to(self.device)
 
             with torch.no_grad():

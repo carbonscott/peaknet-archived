@@ -52,12 +52,12 @@ class SFXDataset(Dataset):
         self.dist          = getattr(config, 'dist'          , 5)
         self.trans         = getattr(config, 'trans'         , None)
 
-        self.fl_stream_list  = []
-        self.data_orig_list  = []
-        self.peak_orig_list  = []
-        self.seq_orig_list   = []
-        self.data_cache_dict = {}
-        self.is_cache        = False
+        self.fl_stream_list        = []
+        self.data_orig_list        = []
+        self.peak_orig_list        = []
+        self.seq_orig_list         = []
+        self.data_label_cache_dict = {}
+        self.is_cache              = False
 
         # Set the seed...
         # Debatable whether seed should be set in the dataset or in the running code
@@ -213,56 +213,96 @@ class SFXDataset(Dataset):
         return len(self.data_list)
 
 
-    ## def cache_img(self, idx_list = []):
-    ##     ''' Cache the whole dataset in data_list or some subset.
-    ##     '''
-    ##     # If subset is not give, then go through the whole set...
-    ##     if not len(idx_list): idx_list = range(len(self.data_list))
+    def cache_img(self, idx_list = []):
+        ''' Cache the whole dataset in data_list or some subset.
+        '''
+        # If subset is not give, then go through the whole set...
+        if not len(idx_list): idx_list = range(len(self.data_list))
 
-    ##     for idx in idx_list:
-    ##         # Skip those have been recorded...
-    ##         if idx in self.imglabel_cache_dict: continue
+        for idx in idx_list:
+            # Skip those have been recorded...
+            if idx in self.data_label_cache_dict: continue
 
-    ##         # Otherwise, record it
-    ##         img, label = self.get_img_and_label(idx, verbose = True)
-    ##         self.imglabel_cache_dict[idx] = (img, label)
+            # Otherwise, record it
+            img, label = self.get_data_and_label(idx, verbose = True)
+            self.data_label_cache_dict[idx] = (img, label)
 
-    ##     return None
+        return None
 
 
     def get_data_and_label(self, idx, verbose = False):
         # Read image...
-        fl_cxi, event_crystfel = self.data_list[idx]
-        basename = (exp, run)
-
+        fl_cxi, event_crystfel = self.data_orig_list[idx]
         with h5py.File(fl_cxi, 'r') as fh:
             img = fh["/entry_1/instrument_1/detector_1/data"][event_crystfel]
+        size_y, size_x = img.shape
 
-        if verbose: logger.info(f'DATA LOADING - {exp} {run} {event_num} {label}.')
+        # Create a mask that works as the label...
+        mask_as_label = np.zeros_like(img)
+        peaks = self.peak_orig_list[idx]
+        offset = 4
+        for (x, y) in peaks:
+            x_b = max(int(x - offset), 0)
+            x_e = min(int(x + offset), size_x)
+            y_b = max(int(y - offset), 0)
+            y_e = min(int(y + offset), size_y)
+            patch = img[y_b : y_e, x_b : x_e]
 
-        return img, label
+            std_level  = 1 
+            patch_mean = np.mean(patch)
+            patch_std  = np.std (patch)
+            threshold  = patch_mean + std_level * patch_std
+
+            mask_as_label[y_b : y_e, x_b : x_e][~(patch < threshold)] = 1.0
+
+        if verbose: logger.info(f'DATA LOADING - {fl_cxi} {event_crystfel}.')
+
+        return img, mask_as_label
 
 
-    ## def create_label(self, img, )
+    def __getitem__(self, idx):
+        img, label = self.data_label_cache_dict[idx] if   idx in self.data_label_cache_dict \
+                                                     else self.get_data_and_label(idx)
+
+        # Apply any possible transformation...
+        # How to define a custom transform function?
+        # Input : img, **kwargs 
+        # Output: img_transfromed
+        if self.trans is not None:
+            img = self.trans(img)
+
+        # Normalize input image...
+        img_mean = np.mean(img)
+        img_std  = np.std(img)
+        img_norm = (img - img_mean) / img_std
+
+        return img_norm, label
 
 
-    ## def __getitem__(self, idx):
-    ##     img, label = self.imglabel_cache_dict[idx] if   idx in self.imglabel_cache_dict \
-    ##                                                else self.get_img_and_label(idx)
 
-    ##     # Apply any possible transformation...
-    ##     # How to define a custom transform function?
-    ##     # Input : img, **kwargs 
-    ##     # Output: img_transfromed
-    ##     if self.trans is not None:
-    ##         img = self.trans(img)
 
-    ##     # Normalize input image...
-    ##     img_mean = np.mean(img)
-    ##     img_std  = np.std(img)
-    ##     img_norm = (img - img_mean) / img_std
+class MiniSFXDataset(SFXDataset):
+    def __init__(self, config):
+        super().__init__(config)
 
-    ##     # If not flat, add one extra dimension to reflect the number channels...
-    ##     img_norm = img_norm[np.newaxis,] if not self.isflat else img_norm.reshape(-1)
+        self.miniset = self.form_miniset()
 
-    ##     return img_norm, int(label)
+
+    def __len__(self):
+        return self.size_sample
+
+
+    def __getitem__(self, idx_in_miniset):
+        idx = self.miniset[idx_in_miniset]
+
+        img, label = super().__getitem__(idx)
+
+        return img[None,], label
+
+
+    def form_miniset(self):
+        size_sample = self.size_sample
+
+        miniset = random.sample(self.seq_list, k = size_sample)
+
+        return miniset

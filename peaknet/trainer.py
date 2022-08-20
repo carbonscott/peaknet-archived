@@ -73,7 +73,8 @@ class Trainer:
         batch = tqdm.tqdm(enumerate(loader_train), total = len(loader_train), disable = config_train.tqdm_disable)
         for step_id, entry in batch:
             # Unpack dataloader entry, where mask is the label...
-            batch_img, batch_mask, batch_metadata = entry
+            ## batch_img, batch_mask, batch_metadata = entry
+            batch_img, batch_mask = entry
 
             batch_img  = batch_img.to(self.device)
             batch_mask = batch_mask.to(self.device)

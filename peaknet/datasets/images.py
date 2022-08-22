@@ -47,17 +47,21 @@ class SFXDataset(Dataset):
         self.size_sample   = getattr(config, 'size_sample'   , None)
         self.frac_train    = getattr(config, 'frac_train'    , None)    # Proportion/Fraction of training examples
         self.frac_validate = getattr(config, 'frac_validate' , None)    # Proportion/Fraction of validation examples
-        self.dataset_usage = getattr(config, 'dataset_usage' , None)    # train, validate, test, all
+        self.dataset_usage = getattr(config, 'dataset_usage' , None)    # train, validate, test
         self.seed          = getattr(config, 'seed'          , None)
         self.dist          = getattr(config, 'dist'          , 5)
         self.trans         = getattr(config, 'trans'         , None)
 
-        self.fl_stream_list        = []
-        self.data_orig_list        = []
-        self.peak_orig_list        = []
-        self.seq_orig_list         = []
-        self.data_label_cache_dict = {}
-        self.is_cache              = False
+        # Variables that capture raw information from the input (stream files)
+        self.fl_stream_list           = []
+        self.metadata_orig_list       = [] # ...A list of (fl_cxi, event_crystfel) that have labeled peaks
+        self.peak_orig_list           = [] # ...A list of labeled peaks
+        self.img_and_label_cache_dict = {} # ...A list of image data and their corresponding labels
+        self.is_cache                 = False
+
+        # Variables that capture information in data spliting
+        self.metadata_list   = []
+        self.peak_list       = []
 
         # Set the seed...
         # Debatable whether seed should be set in the dataset or in the running code
@@ -79,17 +83,18 @@ class SFXDataset(Dataset):
             stream_dict = self.parse_stream(fl_stream)
 
             # Create a list of data entry from a stream file...
-            data_list_per_stream = self.create_data_list(stream_dict)
+            metadata_per_stream = self.extract_metadata(stream_dict)
 
             # Accumulate data...
-            self.data_orig_list.extend(data_list_per_stream)
+            self.metadata_orig_list.extend(metadata_per_stream)
 
             # Extract all peaks...
-            self.peak_orig_list.extend(self.extract_labeled_peaks(stream_dict))
+            peak_list_per_stream = self.extract_labeled_peak(stream_dict)
+            self.peak_orig_list.extend(peak_list_per_stream)
 
         # Split original dataset sequence into training sequence and holdout sequence...
-        self.seq_orig_list = list(range(len(self.data_orig_list)))
-        seq_train_list, seq_holdout_list = split_dataset(self.seq_orig_list, self.frac_train)
+        seq_orig_list = list(range(len(self.metadata_orig_list)))
+        seq_train_list, seq_holdout_list = split_dataset(seq_orig_list, self.frac_train)
 
         # Calculate the percentage of validation in the whole holdout set...
         frac_holdout = 1.0 - self.frac_train
@@ -104,13 +109,13 @@ class SFXDataset(Dataset):
             'validate' : seq_valid_list,
             'test'     : seq_test_list,
         }
-        self.seq_list = self.seq_orig_list
+        seq_random_list = seq_orig_list
         if self.dataset_usage in dataset_by_usage_dict:
-            self.seq_list = dataset_by_usage_dict[self.dataset_usage]
+            seq_random_list = dataset_by_usage_dict[self.dataset_usage]
 
         # Create data list based on the sequence...
-        self.data_list = [ self.data_orig_list[i] for i in self.seq_list ]
-        self.peak_list = [ self.peak_orig_list[i] for i in self.seq_list ]
+        self.metadata_list = [ self.metadata_orig_list[i] for i in seq_random_list ]
+        self.peak_list     = [ self.peak_orig_list[i]     for i in seq_random_list ]
 
         return None
 
@@ -149,18 +154,18 @@ class SFXDataset(Dataset):
         return stream_dict
 
 
-    def create_data_list(self, stream_dict):
+    def extract_metadata(self, stream_dict):
         # Get all filename and crystfel event...
         fl_cxi = list(stream_dict['chunk'].keys())[0]
         event_crystfel_list = list(stream_dict['chunk'][fl_cxi].keys())
 
         # Accumulate data for making a label...
-        data_list = [ (fl_cxi, event_crystfel) for event_crystfel in event_crystfel_list ]
+        metadata_list = [ (fl_cxi, event_crystfel) for event_crystfel in event_crystfel_list ]
 
-        return data_list
+        return metadata_list
 
 
-    def extract_labeled_peaks(self, stream_dict):
+    def extract_labeled_peak(self, stream_dict):
         # Get all filename and crystfel event...
         fl_cxi = list(stream_dict['chunk'].keys())[0]
         event_crystfel_list = list(stream_dict['chunk'][fl_cxi].keys())
@@ -210,36 +215,36 @@ class SFXDataset(Dataset):
 
 
     def __len__(self):
-        return len(self.data_list)
+        return len(self.seq_random_list)
 
 
     def cache_img(self, idx_list = []):
-        ''' Cache the whole dataset in data_list or some subset.
+        ''' Cache image in the seq_random_list unless a subset is specified.
         '''
         # If subset is not give, then go through the whole set...
-        if not len(idx_list): idx_list = range(len(self.data_list))
+        if not len(idx_list): idx_list = range(list(self.metadata_list))
 
         for idx in idx_list:
             # Skip those have been recorded...
-            if idx in self.data_label_cache_dict: continue
+            if idx in self.img_and_label_cache_dict: continue
 
             # Otherwise, record it
-            img, label = self.get_data_and_label(idx, verbose = True)
-            self.data_label_cache_dict[idx] = (img, label)
+            img, label = self.get_img_and_label(idx, verbose = True)
+            self.img_and_label_cache_dict[idx] = (img, label)
 
         return None
 
 
-    def get_data_and_label(self, idx, verbose = False):
+    def get_img_and_label(self, idx, verbose = False):
         # Read image...
-        fl_cxi, event_crystfel = self.data_orig_list[idx]
+        fl_cxi, event_crystfel = self.metadata_list[idx]
         with h5py.File(fl_cxi, 'r') as fh:
             img = fh["/entry_1/instrument_1/detector_1/data"][event_crystfel]
         size_y, size_x = img.shape
 
         # Create a mask that works as the label...
         mask_as_label = np.zeros_like(img)
-        peaks = self.peak_orig_list[idx]
+        peaks = self.peak_list[idx]
         offset = 4
         for (x, y) in peaks:
             x_b = max(int(x - offset), 0)
@@ -261,8 +266,8 @@ class SFXDataset(Dataset):
 
 
     def __getitem__(self, idx):
-        img, label = self.data_label_cache_dict[idx] if   idx in self.data_label_cache_dict \
-                                                     else self.get_data_and_label(idx)
+        img, label = self.img_and_label_cache_dict[idx] if   idx in self.img_and_label_cache_dict \
+                                                        else self.get_img_and_label(idx)
 
         # Apply any possible transformation...
         # How to define a custom transform function?
@@ -285,24 +290,28 @@ class MiniSFXDataset(SFXDataset):
     def __init__(self, config):
         super().__init__(config)
 
-        self.miniset = self.form_miniset()
+        self.idx_metadata_subset_list = self.form_subset()
 
 
     def __len__(self):
         return self.size_sample
 
 
-    def __getitem__(self, idx_in_miniset):
-        idx = self.miniset[idx_in_miniset]
+    def __getitem__(self, idx):
+        # Find its real index in metadata_list...
+        idx_metadata = self.idx_metadata_subset_list[idx]
 
-        img, label = super().__getitem__(idx)
+        # Access the indexed data in metadata_list...
+        img, label = super().__getitem__(idx_metadata)
 
-        return img[None,], label
+        return img, label
 
 
-    def form_miniset(self):
+    def form_subset(self):
         size_sample = self.size_sample
 
-        miniset = random.sample(self.seq_list, k = size_sample)
+        idx_metadata_list = range(len(self.metadata_list))
 
-        return miniset
+        idx_metadata_subset_list = random.sample(idx_metadata_list, k = size_sample)
+
+        return idx_metadata_subset_list

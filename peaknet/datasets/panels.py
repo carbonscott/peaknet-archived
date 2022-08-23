@@ -170,7 +170,7 @@ class SFXPanelDataset(Dataset):
         '''
         # Read image...
         # Ignore which stream file this information is extracted from
-        fl_stream, fl_cxi, event_crystfel = self.metadata_list[idx]
+        fl_stream, fl_cxi, event_crystfel, panel = self.metadata_list[idx]
 
         # Fetch stream either from scratch or from a cached dictionary...
         stream_per_file_dict = self.parse_stream(fl_stream) if not fl_stream in self.stream_cache_dict \
@@ -180,13 +180,11 @@ class SFXPanelDataset(Dataset):
         panel_dict = stream_per_file_dict['chunk'][fl_cxi][event_crystfel]
 
         # Find all peaks...
-        found_per_event_dict   = {}
-        indexed_per_event_dict = {}
-        for panel, peak_saved_dict in panel_dict.items():
-            found_per_event_dict[panel]   = peak_saved_dict['found']
-            indexed_per_event_dict[panel] = peak_saved_dict['indexed']
+        peak_saved_dict        = panel_dict[panel]
+        found_per_panel_dict   = peak_saved_dict['found']
+        indexed_per_panel_dict = peak_saved_dict['indexed']
 
-        return found_per_event_dict, indexed_per_event_dict
+        return found_per_panel_dict, indexed_per_panel_dict
 
 
     def extract_metadata_and_labeled_peak_from_streamfile(self, fl_stream):

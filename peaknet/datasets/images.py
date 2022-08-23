@@ -223,7 +223,7 @@ class SFXDataset(Dataset):
                 indexed_per_event_dict[panel] = peak_saved_dict['indexed']
 
             # Filter peaks and only keep those that are indexed...
-            peak_list_per_chunk = []
+            peak_dict_per_chunk = {}
             for panel, found_list in found_per_event_dict.items():
                 # Skp panels that have no peaks found...
                 if not panel in indexed_per_event_dict: continue
@@ -243,11 +243,14 @@ class SFXDataset(Dataset):
                     if len(neighbor_list) == 0: continue
 
                     x, y = found_list[idx]
+                    x = int(x)
+                    y = int(y)
 
-                    peak_list_per_chunk.append((int(x), int(y)))
+                    if not panel in peak_dict_per_chunk: peak_dict_per_chunk[panel] = [(x, y)]
+                    else                               : peak_dict_per_chunk[panel].append((x, y))
 
             # Accumulate data for making a label...
-            peak_list.append(peak_list_per_chunk)
+            peak_list.append(peak_dict_per_chunk)
 
         return peak_list
 
@@ -283,21 +286,22 @@ class SFXDataset(Dataset):
 
         # Create a mask that works as the label...
         mask_as_label = np.zeros_like(img)
-        peaks = self.peak_list[idx]
+        peak_dict = self.peak_list[idx]
         offset = 4
-        for (x, y) in peaks:
-            x_b = max(int(x - offset), 0)
-            x_e = min(int(x + offset), size_x)
-            y_b = max(int(y - offset), 0)
-            y_e = min(int(y + offset), size_y)
-            patch = img[y_b : y_e, x_b : x_e]
+        for panel, peak_per_panel_list in peak_dict.items():
+            for x, y in peak_per_panel_list:
+                x_b = max(int(x - offset), 0)
+                x_e = min(int(x + offset), size_x)
+                y_b = max(int(y - offset), 0)
+                y_e = min(int(y + offset), size_y)
+                patch = img[y_b : y_e, x_b : x_e]
 
-            std_level  = 1 
-            patch_mean = np.mean(patch)
-            patch_std  = np.std (patch)
-            threshold  = patch_mean + std_level * patch_std
+                std_level  = 1 
+                patch_mean = np.mean(patch)
+                patch_std  = np.std (patch)
+                threshold  = patch_mean + std_level * patch_std
 
-            mask_as_label[y_b : y_e, x_b : x_e][~(patch < threshold)] = 1.0
+                mask_as_label[y_b : y_e, x_b : x_e][~(patch < threshold)] = 1.0
 
         if verbose: logger.info(f'DATA LOADING - {fl_cxi} {event_crystfel}.')
 

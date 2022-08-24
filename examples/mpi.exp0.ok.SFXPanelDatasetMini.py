@@ -7,8 +7,6 @@ import numpy as np
 from peaknet.datasets.panels import ConfigDataset, SFXPanelDatasetMini
 from peaknet.datasets.stream_parser import GeomInterpreter
 
-from mpi4py import MPI
-
 import matplotlib              as mpl
 import matplotlib.pyplot       as plt
 import matplotlib.colors       as mcolors
@@ -16,7 +14,10 @@ import matplotlib.patches      as mpatches
 import matplotlib.transforms   as mtransforms
 import matplotlib.font_manager as font_manager
 
+from mpi4py import MPI
+
 mpi_comm = MPI.COMM_WORLD
+mpi_rank = mpi_comm.Get_rank()
 
 class VizCheetahGeom:
     def __init__(self, dataset_train, title, figsize, **kwargs):
@@ -388,14 +389,14 @@ config_dataset = ConfigDataset( fl_csv        = fl_csv,
 
 # Define the training set
 dataset_train = SFXPanelDatasetMini(config_dataset)
-mpi_rank = mpi_comm.Get_rank()
+dataset_train.mpi_cache_img()
+
 if mpi_rank == 0: 
     MPI.Finalize()
-    ## dataset_train.cache_img()
 
     # Let's plot the first image...
-    ## idx = 3
-    idx = 75
+    idx = 3
+    ## idx = 75
     disp_manager = VizCheetahGeom(dataset_train = dataset_train, 
                                   title        = '', 
                                   figsize      = (36,10))

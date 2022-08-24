@@ -222,3 +222,44 @@ def split_dataset(dataset, fracA):
     fracB_list = sorted(list(fracB_list))
 
     return fracA_list, fracB_list
+
+
+
+
+
+def chunk_list(input_list, num_chunk = 2):
+
+    chunk_size = len(input_list) // num_chunk + 1
+
+    chunked_list = []
+    for idx_chunk in range(num_chunk):
+        idx_b = idx_chunk * chunk_size
+        idx_e = idx_b + chunk_size
+        if idx_chunk == num_chunk - 1: idx_e = len(input_list)
+        seg = input_list[idx_b : idx_e]
+        chunked_list.append(seg)
+
+    return chunked_list
+
+
+
+
+def chunk_dict(input_dict, num_chunk = 2):
+
+    chunk_size = len(input_dict) // num_chunk + 1
+
+    kv_iter = iter(input_dict.items())
+
+    chunked_dict_in_list = []
+    for idx_chunk in range(num_chunk):
+        chunked_dict = {}
+        idx_b = idx_chunk * chunk_size
+        idx_e = idx_b + chunk_size
+        if idx_chunk == num_chunk - 1: idx_e = len(input_dict)
+        for _ in range(idx_e - idx_b):
+            k, v = next(kv_iter)
+            chunked_dict[k] = v
+        chunked_dict_in_list.append(chunked_dict)
+
+    return chunked_dict_in_list
+

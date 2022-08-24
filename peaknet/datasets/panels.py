@@ -63,12 +63,12 @@ class SFXPanelDataset(Dataset):
         self.is_cache           = False
 
         # Variables that capture information in data spliting
-        self.metadata_list   = []
-        self.peak_list       = []
+        self.metadata_list = []
+        self.peak_list     = []
 
         # Variables for caching...
-        self.peak_cache_dict    = {} # ...A list of image data and their corresponding labels
-        self.raw_img_cache_dict = {}
+        self.peak_cache_dict      = {} # ...A list of image data and their corresponding labels
+        self.raw_img_cache_dict   = {}
         self.raw_label_cache_dict = {}
 
         # Set the seed...

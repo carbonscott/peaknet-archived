@@ -54,6 +54,7 @@ class SFXPanelDataset(Dataset):
         self.seed          = getattr(config, 'seed'          , None)
         self.dist          = getattr(config, 'dist'          , 5)
         self.trans         = getattr(config, 'trans'         , None)
+        self.mpi_comm      = getattr(config, 'mpi_comm'      , None)
 
         # Variables that capture raw information from the input (stream files)
         self.fl_stream_list     = []
@@ -88,13 +89,14 @@ class SFXPanelDataset(Dataset):
         # Obtain all indexed SFX event from stream files...
         for fl_stream in self.fl_stream_list:
             # Get the stream object and save it to a global dictionary...
-            stream_per_file_dict = self.parse_stream(fl_stream)
             if not fl_stream in self.stream_cache_dict:
-                self.stream_cache_dict[fl_stream] = stream_per_file_dict
+                self.stream_cache_dict[fl_stream] = self.parse_stream(fl_stream)
 
             # Create a list of data entry from a stream file...
             metadata_per_stream, peak_list_per_stream = \
-                self.extract_metadata_and_labeled_peak_from_streamfile(fl_stream)
+                self.mpi_extract_metadata_and_labeled_peak_from_streamfile(fl_stream) \
+                if self.mpi_comm is not None                                          \
+                else self.extract_metadata_and_labeled_peak_from_streamfile(fl_stream)
 
             # Accumulate metadata...
             self.metadata_orig_list.extend(metadata_per_stream)    # (fl_stream, fl_cxi, event_crystfel)
@@ -242,6 +244,102 @@ class SFXPanelDataset(Dataset):
                     # Accumulate data for making a label...
                     metadata_list.append(panel_descriptor)
                     peak_list.append(peak_per_panel_list)
+
+        return metadata_list, peak_list
+
+
+    def mpi_extract_metadata_and_labeled_peak_from_streamfile(self, fl_stream):
+        '''
+        Extract metadata and labeled peak from chunks with MPI.
+        '''
+        # Import chunking method...
+        from peaknet.utils import split_dict_into_chunk
+
+        # Get the MPI metadata...
+        mpi_comm = self.mpi_comm
+        mpi_size = mpi_comm.Get_size()    # num of processors
+        mpi_rank = mpi_comm.Get_rank()
+        mpi_data_tag  = 11
+
+        # Fetch stream either from scratch or from a cached dictionary...
+        stream_per_file_dict = self.parse_stream(fl_stream) if not fl_stream in self.stream_cache_dict \
+                                                            else self.stream_cache_dict[fl_stream]
+
+        # Get the chunk...
+        chunk_dict = stream_per_file_dict['chunk']
+
+        for fl_cxi, event_crystfel_list in chunk_dict.items():
+            # Split the workload...
+            event_crystfel_list_in_chunk = split_dict_into_chunk(event_crystfel_list, max_num_chunk = mpi_size)
+
+            # Process chunk by each worker...
+            if mpi_rank != 0:
+                event_crystfel_list_per_worker = event_crystfel_list_in_chunk[mpi_rank]
+                metadata_list, peak_list = self.extract_metadata_and_labeled_peak_from_event(fl_stream, chunk_dict, fl_cxi, event_crystfel_list_per_worker)
+
+                data_to_send = (metadata_list, peak_list)
+                mpi_comm.send(data_to_send, dest = 0, tag = mpi_data_tag)
+
+            if mpi_rank == 0:
+                event_crystfel_list_per_worker = event_crystfel_list_in_chunk[mpi_rank]
+                metadata_list, peak_list = self.extract_metadata_and_labeled_peak_from_event(fl_stream, chunk_dict, fl_cxi, event_crystfel_list_per_worker)
+
+                for i in range(1, mpi_size, 1):
+                    data_received = mpi_comm.recv(source = i, tag = mpi_data_tag)
+                    metadata_list_per_worker, peak_list_per_worker = data_received
+
+                    metadata_list.extend(metadata_list_per_worker)
+                    peak_list.extend(peak_list_per_worker)
+
+        return metadata_list, peak_list
+
+
+    def extract_metadata_and_labeled_peak_from_event(self, fl_stream, chunk_dict, fl_cxi, event_crystfel_list):
+        metadata_list = []
+        peak_list     = []
+        # Only keep those both found and indexed peaks...
+        for event_crystfel in event_crystfel_list:
+            # Get panels in an event...
+            panel_dict = chunk_dict[fl_cxi][event_crystfel]
+
+            # Find all peaks...
+            found_per_event_dict   = {}
+            indexed_per_event_dict = {}
+            for panel, peak_saved_dict in panel_dict.items():
+                found_per_event_dict[panel]   = peak_saved_dict['found']
+                indexed_per_event_dict[panel] = peak_saved_dict['indexed']
+
+            # Filter peaks and only keep those that are indexed...
+            for panel, found_list in found_per_event_dict.items():
+                panel_descriptor = (fl_stream, fl_cxi, event_crystfel, panel)
+
+                # Skp panels that have no peaks found...
+                if not panel in indexed_per_event_dict: continue
+
+                # Skp panel that have peaks found but nothing indexed...
+                indexed_list = indexed_per_event_dict[panel]
+                if len(indexed_list) == 0: continue
+
+                found_list_tree   = cKDTree(found_list)
+                indexed_list_tree = cKDTree(indexed_list)
+
+                # Filter based on a thresholding distance that tolerates the separation between a found peak and an indexed peak...
+                idx_indexed_peak_list = found_list_tree.query_ball_tree(indexed_list_tree, r = self.dist)
+
+                # Extract filtered peak positions for each panel...
+                peak_per_panel_list = []
+                for idx, neighbor_list in enumerate(idx_indexed_peak_list):
+                    if len(neighbor_list) == 0: continue
+
+                    x, y = found_list[idx]
+                    x = int(x)
+                    y = int(y)
+
+                    peak_per_panel_list.append((x, y))
+
+                # Accumulate data for making a label...
+                metadata_list.append(panel_descriptor)
+                peak_list.append(peak_per_panel_list)
 
         return metadata_list, peak_list
 

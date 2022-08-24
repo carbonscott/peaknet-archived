@@ -76,6 +76,12 @@ class SFXPanelDataset(Dataset):
         # Debatable whether seed should be set in the dataset or in the running code
         if not self.seed is None: set_seed(self.seed)
 
+        # Set up mpi...
+        if self.mpi_comm is not None:
+            self.mpi_size     = self.mpi_comm.Get_size()    # num of processors
+            self.mpi_rank     = self.mpi_comm.Get_rank()
+            self.mpi_data_tag = 11
+
         # Collect stream files from the csv...
         with open(self.fl_csv, 'r') as fh:
             lines = csv.reader(fh)
@@ -93,10 +99,25 @@ class SFXPanelDataset(Dataset):
                 self.stream_cache_dict[fl_stream] = self.parse_stream(fl_stream)
 
             # Create a list of data entry from a stream file...
-            metadata_per_stream, peak_list_per_stream = \
-                self.mpi_extract_metadata_and_labeled_peak_from_streamfile(fl_stream) \
-                if self.mpi_comm is not None                                          \
-                else self.extract_metadata_and_labeled_peak_from_streamfile(fl_stream)
+            # With MPI
+            if self.mpi_comm is not None:
+                metadata_per_stream, peak_list_per_stream = \
+                    self.mpi_extract_metadata_and_labeled_peak_from_streamfile(fl_stream)
+
+                # Sync across workers for completeness of the class object
+                if self.mpi_rank == 0:
+                    for i in range(1, self.mpi_size, 1):
+                        data_to_send = (metadata_per_stream, peak_list_per_stream)
+                        self.mpi_comm.send(data_to_send, dest = i, tag = self.mpi_data_tag)
+
+                if self.mpi_rank != 0:
+                    data_received = self.mpi_comm.recv(source = 0, tag = self.mpi_data_tag)
+                    metadata_per_stream, peak_list_per_stream = data_received
+
+            # Without MPI
+            else:
+                metadata_per_stream, peak_list_per_stream = \
+                    self.extract_metadata_and_labeled_peak_from_streamfile(fl_stream)
 
             # Accumulate metadata...
             self.metadata_orig_list.extend(metadata_per_stream)    # (fl_stream, fl_cxi, event_crystfel)
@@ -256,10 +277,10 @@ class SFXPanelDataset(Dataset):
         from peaknet.utils import split_dict_into_chunk
 
         # Get the MPI metadata...
-        mpi_comm      = self.mpi_comm
-        mpi_size      = mpi_comm.Get_size()    # num of processors
-        mpi_rank      = mpi_comm.Get_rank()
-        mpi_data_tag  = 11
+        mpi_comm     = self.mpi_comm
+        mpi_size     = self.mpi_size
+        mpi_rank     = self.mpi_rank
+        mpi_data_tag = self.mpi_data_tag
 
         # Fetch stream either from scratch or from a cached dictionary...
         stream_per_file_dict = self.parse_stream(fl_stream) if not fl_stream in self.stream_cache_dict \
@@ -358,11 +379,67 @@ class SFXPanelDataset(Dataset):
             # Skip those have been recorded...
             if idx in self.peak_cache_dict: continue
 
-            # Otherwise, record it
+            # Otherwise, record it...
             img, label = self.get_img_and_label(idx, verbose = True)
             self.peak_cache_dict[idx] = (img, label)
 
         return None
+
+
+    def mpi_cache_img(self):
+        ''' Cache image in the seq_random_list unless a subset is specified
+            using MPI.
+        '''
+        # Import chunking method...
+        from peaknet.utils import split_list_into_chunk
+
+        # Get the MPI metadata...
+        mpi_comm     = self.mpi_comm
+        mpi_size     = self.mpi_size
+        mpi_rank     = self.mpi_rank
+        mpi_data_tag = self.mpi_data_tag
+
+        # If subset is not give, then go through the whole set...
+        idx_list = range(len(self.metadata_list))
+
+        # Split the workload...
+        idx_list_in_chunk = split_list_into_chunk(idx_list, max_num_chunk = mpi_size)
+
+        # Process chunk by each worker...
+        # No need to sync the peak_cache_dict across workers
+        if mpi_rank != 0:
+            if mpi_rank < len(idx_list_in_chunk):
+                idx_list_per_worker = idx_list_in_chunk[mpi_rank]
+                self.peak_cache_dict = self._mpi_cache_img_per_rank(idx_list_per_worker)
+
+            mpi_comm.send(self.peak_cache_dict, dest = 0, tag = mpi_data_tag)
+
+        if mpi_rank == 0:
+            idx_list_per_worker = idx_list_in_chunk[mpi_rank]
+            self.peak_cache_dict = self._mpi_cache_img_per_rank(idx_list_per_worker)
+
+            for i in range(1, mpi_size, 1):
+                peak_cache_dict = mpi_comm.recv(source = i, tag = mpi_data_tag)
+
+                self.peak_cache_dict.update(peak_cache_dict)
+
+        return None
+
+
+    def _mpi_cache_img_per_rank(self, idx_list):
+        ''' Cache image in the seq_random_list unless a subset is specified
+            using MPI.
+        '''
+        peak_cache_dict = {}
+        for idx in idx_list:
+            # Skip those have been recorded...
+            if idx in peak_cache_dict: continue
+
+            # Otherwise, record it...
+            img, label = self.get_img_and_label(idx, verbose = True)
+            peak_cache_dict[idx] = (img, label)
+
+        return peak_cache_dict
 
 
     def get_img_and_label(self, idx, verbose = False):

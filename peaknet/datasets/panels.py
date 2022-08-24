@@ -45,16 +45,16 @@ class SFXPanelDataset(Dataset):
     """
 
     def __init__(self, config):
-        self.fl_csv        = getattr(config, 'fl_csv'        , None)
-        self.drc_project   = getattr(config, 'drc_project'   , None)
-        self.size_sample   = getattr(config, 'size_sample'   , None)
-        self.frac_train    = getattr(config, 'frac_train'    , None)    # Proportion/Fraction of training examples
-        self.frac_validate = getattr(config, 'frac_validate' , None)    # Proportion/Fraction of validation examples
-        self.dataset_usage = getattr(config, 'dataset_usage' , None)    # train, validate, test
-        self.seed          = getattr(config, 'seed'          , None)
-        self.dist          = getattr(config, 'dist'          , 5)
-        self.trans         = getattr(config, 'trans'         , None)
-        self.mpi_comm      = getattr(config, 'mpi_comm'      , None)
+        self.fl_csv        = getattr(config, 'fl_csv'       , None)
+        self.drc_project   = getattr(config, 'drc_project'  , None)
+        self.size_sample   = getattr(config, 'size_sample'  , None)
+        self.frac_train    = getattr(config, 'frac_train'   , None)    # Proportion/Fraction of training examples
+        self.frac_validate = getattr(config, 'frac_validate', None)    # Proportion/Fraction of validation examples
+        self.dataset_usage = getattr(config, 'dataset_usage', None)    # train, validate, test
+        self.seed          = getattr(config, 'seed'         , None)
+        self.dist          = getattr(config, 'dist'         , 5)       # Max distance to consider as an indexed found peak.
+        self.trans         = getattr(config, 'trans'        , None)
+        self.mpi_comm      = getattr(config, 'mpi_comm'     , None)
 
         # Variables that capture raw information from the input (stream files)
         self.fl_stream_list     = []
@@ -256,9 +256,9 @@ class SFXPanelDataset(Dataset):
         from peaknet.utils import split_dict_into_chunk
 
         # Get the MPI metadata...
-        mpi_comm = self.mpi_comm
-        mpi_size = mpi_comm.Get_size()    # num of processors
-        mpi_rank = mpi_comm.Get_rank()
+        mpi_comm      = self.mpi_comm
+        mpi_size      = mpi_comm.Get_size()    # num of processors
+        mpi_rank      = mpi_comm.Get_rank()
         mpi_data_tag  = 11
 
         # Fetch stream either from scratch or from a cached dictionary...

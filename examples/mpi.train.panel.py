@@ -23,15 +23,15 @@ mpi_rank = mpi_comm.Get_rank()
 # Set up parameters for an experiment...
 fl_csv                = 'datasets.csv'
 drc_project           = os.getcwd()
-size_sample_train     = 500
-size_sample_validate  = 500
-frac_train            = 0.005
+size_sample_train     = 1000
+size_sample_validate  = 1000
+frac_train            = 0.5
 frac_validate         = None
 dataset_usage         = 'train'
 
-size_batch     = 1
-lr             = 1e-3
-seed           = 0
+size_batch = 20
+lr         = 1e-3
+seed       = 0
 
 # Clarify the purpose of this experiment...
 hostname = socket.gethostname()
@@ -62,17 +62,18 @@ prefixpath_log = os.path.join(drc_cwd, DRCLOG)
 if not os.path.exists(prefixpath_log): os.makedirs(prefixpath_log)
 path_log = os.path.join(prefixpath_log, fl_log)
 
-# Config logging behaviors
-logging.basicConfig( filename = path_log,
-                     filemode = 'w',
-                     format="%(asctime)s %(levelname)s %(name)-35s - %(message)s",
-                     datefmt="%m/%d/%Y %H:%M:%S",
-                     level=logging.INFO, )
-logger = logging.getLogger(__name__)
+if mpi_rank == 0:
+    # Config logging behaviors
+    logging.basicConfig( filename = path_log,
+                         filemode = 'w',
+                         format="%(asctime)s %(levelname)s %(name)-35s - %(message)s",
+                         datefmt="%m/%d/%Y %H:%M:%S",
+                         level=logging.INFO, )
+    logger = logging.getLogger(__name__)
 
-# Create a metalog to the log file, explaining the purpose of this run...
-metalog = MetaLog( comments = comments )
-metalog.report()
+    # Create a metalog to the log file, explaining the purpose of this run...
+    metalog = MetaLog( comments = comments )
+    metalog.report()
 
 # [[[ DATASET ]]]
 # Config the dataset...
@@ -89,24 +90,16 @@ config_dataset = ConfigDataset( fl_csv        = fl_csv,
 # Define the training set
 dataset_train = SFXPanelDatasetMini(config_dataset)
 dataset_train.mpi_cache_img()
-## dataset_train.cache_img()
 
-if mpi_comm == 0:
+# Define validation set...
+config_dataset.size_sample   = size_sample_validate
+config_dataset.dataset_usage = 'validate'
+
+dataset_validate = SFXPanelDatasetMini(config_dataset)
+dataset_validate.mpi_cache_img()
+
+if mpi_rank == 0:
     MPI.Finalize()
-
-    stop
-    ## dataset_train.report()
-
-    # Report training set...
-    config_dataset.report()
-
-    # Define validation set...
-    config_dataset.size_sample   = size_sample_validate
-    config_dataset.dataset_usage = 'validate'
-    config_dataset.report()
-    dataset_validate = SFXPanelDatasetMini(config_dataset)
-    dataset_validate.cache_img(dataset_validate.miniset)
-
 
     # [[[ IMAGE ENCODER ]]]
     # Config the encoder...

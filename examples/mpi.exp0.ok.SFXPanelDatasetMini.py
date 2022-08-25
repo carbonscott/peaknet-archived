@@ -51,6 +51,11 @@ class VizCheetahGeom:
 
         peak_list = dataset_train.peak_list[idx]
 
+        if self.dataset_train.add_channel_ok:
+            img     = img    [0]
+            mask    = mask   [0]
+            raw_img = raw_img[0]
+
         self.fl_stream         = fl_stream
         self.fl_cxi            = fl_cxi
         self.event_crysfel     = event_crysfel
@@ -108,8 +113,6 @@ class VizCheetahGeom:
 
     def plot_geom(self):
         ax_img  = self.ax_list[0]
-        ## ax_img.set_xticks([])
-        ## ax_img.set_yticks([])
 
         cheetah_geom_dict = self.cheetah_geom_dict
 
@@ -188,7 +191,7 @@ class VizCheetahGeom:
 
         ax_img.invert_yaxis()
 
-        size_y, size_x = img.shape
+        size_y, size_x = img.shape[-2:]
         b_offset = 10
         y_bmin, x_bmin = 0, 0
         y_bmax, x_bmax = size_y, size_x
@@ -298,7 +301,7 @@ class VizCheetahGeom:
 
     def plot_mask(self):
         mask = self.mask
-        size_y, size_x = mask.shape
+        size_y, size_x = mask.shape[-2:]
 
         ax_img = self.ax_list[2]
         im = ax_img.imshow(mask, vmin = 0, vmax = 1)
@@ -377,15 +380,16 @@ seed       = 0
 
 # [[[ DATASET ]]]
 # Config the dataset...
-config_dataset = ConfigDataset( fl_csv        = fl_csv,
-                                drc_project   = drc_project,
-                                size_sample   = size_sample_train, 
-                                dataset_usage = dataset_usage,
-                                trans         = None,
-                                frac_train    = frac_train,
-                                frac_validate = frac_validate,
-                                mpi_comm      = mpi_comm,
-                                seed          = seed, )
+config_dataset = ConfigDataset( fl_csv         = fl_csv,
+                                drc_project    = drc_project,
+                                size_sample    = size_sample_train, 
+                                dataset_usage  = dataset_usage,
+                                trans          = None,
+                                frac_train     = frac_train,
+                                frac_validate  = frac_validate,
+                                mpi_comm       = mpi_comm,
+                                seed           = seed, 
+                                add_channel_ok = True, )
 
 # Define the training set
 dataset_train = SFXPanelDatasetMini(config_dataset)

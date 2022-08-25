@@ -1,3 +1,4 @@
+from peaknet.datasets.transform import center_crop
 """
 ---
 title: U-Net
@@ -99,7 +100,8 @@ class CropAndConcat(nn.Module):
         """
 
         # Crop the feature map from the contracting path to the size of the current feature map
-        contracting_x = torchvision.transforms.functional.center_crop(contracting_x, [x.shape[2], x.shape[3]])
+        ## contracting_x = torchvision.transforms.functional.center_crop(contracting_x, [x.shape[2], x.shape[3]])
+        contracting_x = center_crop(contracting_x, x.shape[2], x.shape[3])
         # Concatenate the feature maps
         x = torch.cat([x, contracting_x], dim=1)
         #

@@ -443,6 +443,11 @@ class SFXPanelDataset(Dataset):
 
 
     def get_img_and_label(self, idx, verbose = False):
+        '''
+        Get both the image and the label (a mask).  
+
+        Caveat: The model requires an extra dimension in returned image.
+        '''
         # Unpack the descriptor to locate a panel...
         fl_stream, fl_cxi, event_crystfel, panel = self.metadata_list[idx]
 
@@ -498,7 +503,7 @@ class SFXPanelDataset(Dataset):
 
         if verbose: logger.info(f'DATA LOADING - {fl_cxi} {event_crystfel} {panel}.')
 
-        return panel_img, panel_label
+        return panel_img[None,], panel_label[None,]
 
 
     def __getitem__(self, idx):

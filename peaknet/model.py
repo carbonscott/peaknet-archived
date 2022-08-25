@@ -3,8 +3,9 @@
 
 import torch
 import torch.nn as nn
-import torchvision.transforms.functional
 import logging
+
+from peaknet.datasets.transform import center_crop
 
 logger = logging.getLogger(__name__)
 
@@ -38,8 +39,8 @@ class PeakFinderModel(nn.Module):
         batch_mask_predicted_with_sigmoid = self.sigmoid(batch_mask_predicted)
 
         # Crop the target mask...
-        size_y, size_x = batch_mask.shape[-2:]
-        batch_mask_crop = torchvision.transforms.functional.center_crop(batch_mask, [size_y, size_x])
+        size_y, size_x = batch_mask_predicted_with_sigmoid.shape[-2:]
+        batch_mask_crop = center_crop(batch_mask, size_y, size_x)
 
         # Calculate loss...
         loss = self.loss_func(batch_mask_predicted_with_sigmoid, batch_mask_crop)

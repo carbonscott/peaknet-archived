@@ -79,6 +79,10 @@ class Trainer:
             batch_img  = batch_img.to(self.device)
             batch_mask = batch_mask.to(self.device)
 
+            ## # Reshape input dim to (batch, some_channel, size_y, size_x)
+            ## batch_img  = torch.unsqueeze(batch_img,  dim = 1)
+            ## batch_mask = torch.unsqueeze(batch_mask, dim = 1)
+
             loss = self.model.forward(batch_img, batch_mask)
 
             optimizer.zero_grad()

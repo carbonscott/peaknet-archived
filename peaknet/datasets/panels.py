@@ -45,16 +45,17 @@ class SFXPanelDataset(Dataset):
     """
 
     def __init__(self, config):
-        self.fl_csv        = getattr(config, 'fl_csv'       , None)
-        self.drc_project   = getattr(config, 'drc_project'  , None)
-        self.size_sample   = getattr(config, 'size_sample'  , None)
-        self.frac_train    = getattr(config, 'frac_train'   , None)    # Proportion/Fraction of training examples
-        self.frac_validate = getattr(config, 'frac_validate', None)    # Proportion/Fraction of validation examples
-        self.dataset_usage = getattr(config, 'dataset_usage', None)    # train, validate, test
-        self.seed          = getattr(config, 'seed'         , None)
-        self.dist          = getattr(config, 'dist'         , 5)       # Max distance to consider as an indexed found peak.
-        self.trans         = getattr(config, 'trans'        , None)
-        self.mpi_comm      = getattr(config, 'mpi_comm'     , None)
+        self.fl_csv         = getattr(config, 'fl_csv'        , None)
+        self.drc_project    = getattr(config, 'drc_project'   , None)
+        self.size_sample    = getattr(config, 'size_sample'   , None)
+        self.frac_train     = getattr(config, 'frac_train'    , None)    # Proportion/Fraction of training examples
+        self.frac_validate  = getattr(config, 'frac_validate' , None)    # Proportion/Fraction of validation examples
+        self.dataset_usage  = getattr(config, 'dataset_usage' , None)    # train, validate, test
+        self.seed           = getattr(config, 'seed'          , None)
+        self.dist           = getattr(config, 'dist'          , 5)       # Max distance to consider as an indexed found peak.
+        self.trans          = getattr(config, 'trans'         , None)
+        self.mpi_comm       = getattr(config, 'mpi_comm'      , None)
+        self.add_channel_ok = getattr(config, 'add_channel_ok', True)
 
         # Variables that capture raw information from the input (stream files)
         self.fl_stream_list     = []
@@ -463,6 +464,8 @@ class SFXPanelDataset(Dataset):
             with h5py.File(fl_cxi, 'r') as fh:
                 raw_img = fh["/entry_1/instrument_1/detector_1/data"][event_crystfel]
 
+                if self.add_channel_ok: raw_img = raw_img[None,]
+
                 self.raw_img_cache_dict[cache_key] = raw_img
 
         # Otherwise, load it from cache
@@ -470,12 +473,12 @@ class SFXPanelDataset(Dataset):
 
         # Select an area as a panel image and a masked panel...
         x_min, y_min, x_max, y_max = cheetah_geom_dict[panel]
-        panel_img = raw_img[y_min : y_max, x_min : x_max]
+        panel_img = raw_img[..., y_min : y_max, x_min : x_max]
 
         # Create a mask that works as the label...
         panel_label         = np.zeros_like(panel_img)    # ...A mask
         offset              = 4
-        size_y, size_x      = panel_img.shape
+        size_y, size_x      = panel_img.shape[-2:]
         peak_per_panel_list = self.peak_list[idx]
         for peak in peak_per_panel_list:
             # Unack coordiante...
@@ -490,7 +493,7 @@ class SFXPanelDataset(Dataset):
             patch_x_max = min(int(x + offset), size_x)
             patch_y_min = max(int(y - offset), 0)
             patch_y_max = min(int(y + offset), size_y)
-            patch_img = panel_img[patch_y_min : patch_y_max, patch_x_min : patch_x_max]
+            patch_img = panel_img[..., patch_y_min : patch_y_max, patch_x_min : patch_x_max]
 
             # Figure out the local threshold...
             std_level  = 1
@@ -499,11 +502,15 @@ class SFXPanelDataset(Dataset):
             threshold  = patch_mean + std_level * patch_std
 
             # Mask the patch area out...
-            panel_label[patch_y_min : patch_y_max, patch_x_min : patch_x_max][~(patch_img < threshold)] = 1.0
+            panel_label[..., patch_y_min : patch_y_max, patch_x_min : patch_x_max][~(patch_img < threshold)] = 1.0
 
         if verbose: logger.info(f'DATA LOADING - {fl_cxi} {event_crystfel} {panel}.')
 
-        return panel_img[None,], panel_label[None,]
+        ## if self.add_channel_ok: 
+        ##     panel_img   = panel_img  [None,]
+        ##     panel_label = panel_label[None,]
+
+        return panel_img, panel_label
 
 
     def __getitem__(self, idx):

@@ -45,7 +45,7 @@ class PeakFinderModel(nn.Module):
         # Calculate loss...
         loss = self.loss_func(batch_mask_predicted_with_sigmoid, batch_mask_crop)
 
-        return loss
+        return batch_mask_predicted_with_sigmoid, batch_mask_crop, loss
 
 
     def configure_optimizers(self, config_train):

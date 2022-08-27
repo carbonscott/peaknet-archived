@@ -23,14 +23,15 @@ mpi_rank = mpi_comm.Get_rank()
 # Set up parameters for an experiment...
 fl_csv                = 'datasets.csv'
 drc_project           = os.getcwd()
-size_sample_train     = 1000
-size_sample_validate  = 1000
+size_sample_train     = 200
+size_sample_validate  = 200
 frac_train            = 0.5
 frac_validate         = None
 dataset_usage         = 'train'
 
+## size_batch = 30    # 30 corresponds to 10G-ish
 size_batch = 20
-lr         = 1e-3
+lr         = 1e-4
 seed       = 0
 
 # Clarify the purpose of this experiment...
@@ -110,7 +111,13 @@ if mpi_rank == 0:
 
     # [[[ MODEL ]]]
     # Config the model...
-    config_peakfinder = ConfigPeakFinderModel( method = method )
+    # Calculate positive / negative example ratio
+    pos_rate  = 10    # Underestimate 10x less the postive positive pixels
+    pos_pixel = pos_rate * sum([ dataset_train[i][-1].sum() for i in range(len(dataset_train)) ])
+    neg_pixel = len(dataset_train) * dataset_train[0][0].size - pos_pixel
+    pos_weight = neg_pixel / pos_pixel
+    config_peakfinder = ConfigPeakFinderModel( method     = method, 
+                                               pos_weight = pos_weight, )
     model = PeakFinderModel(config_peakfinder)
 
     # Initialize weights...
@@ -121,11 +128,11 @@ if mpi_rank == 0:
 
 
     # [[[ CHECKPOINT ]]]
-    DRCCHKPT         = "chkpts"
+    DRCCHKPT = "chkpts"
     prefixpath_chkpt = os.path.join(drc_cwd, DRCCHKPT)
     if not os.path.exists(prefixpath_chkpt): os.makedirs(prefixpath_chkpt)
-    fl_chkpt         = f"{timestamp}.train.chkpt"
-    path_chkpt       = os.path.join(prefixpath_chkpt, fl_chkpt)
+    fl_chkpt   = f"{timestamp}.train.chkpt"
+    path_chkpt = os.path.join(prefixpath_chkpt, fl_chkpt)
 
 
     # [[[ TRAINER ]]]

@@ -129,7 +129,7 @@ class StreamParser:
             r"""
             (?x)
             # Match the pattern below
-            (?> (?&DET_PANEL) ) / (?&COORD)
+            (?> (?&DET_PANEL) / ) (?&COORD)
             \s = \s    # Match a equal sign with blank spaces on both sides
             (?&VALUE)  # Match the value of the coordinate
 

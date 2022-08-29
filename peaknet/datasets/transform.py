@@ -32,3 +32,22 @@ def center_crop(img, size_y_crop, size_x_crop):
     return img_super[...,
                      y_min_crop : y_min_crop + size_y_crop,
                      x_min_crop : x_min_crop + size_x_crop]
+
+
+
+
+def coord_img_to_crop(coord_tuple, size_img_tuple, size_crop_tuple):
+    # Unpack all inputs...
+    y          , x           = coord_tuple
+    size_y_img ,  size_x_img = size_img_tuple
+    size_y_crop, size_x_crop = size_crop_tuple
+
+    # Transform...
+    y_crop = (size_y_crop - size_y_img) // 2 + y
+    x_crop = (size_x_crop - size_x_img) // 2 + x
+
+    ## # [NOT ENTIRELY SURE] Correct for one pixel...
+    ## y_crop += 1
+    x_crop += 1
+
+    return y_crop, x_crop

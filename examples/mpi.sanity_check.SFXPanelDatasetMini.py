@@ -9,7 +9,7 @@ from peaknet.datasets.panels        import ConfigDataset, SFXPanelDatasetMini
 from peaknet.methods.unet           import UNet
 from peaknet.model                  import ConfigPeakFinderModel, PeakFinderModel
 from peaknet.datasets.stream_parser import GeomInterpreter
-from peaknet.datasets.transform     import center_crop
+from peaknet.datasets.transform     import center_crop, coord_img_to_crop
 
 import matplotlib              as mpl
 import matplotlib.pyplot       as plt
@@ -294,6 +294,36 @@ class SanityChecker:
                                          facecolor='none')
             ax_img.add_patch(rec_obj)
 
+        # BAD CODING PRACTICE, not good for maintainence, change it later!!!
+        ax_img = self.ax_list[3]
+
+        img  = self.img
+        mask = self.mask_predicted
+
+        size_img_tuple  = img.shape[-2:]
+        size_crop_tuple = mask.shape[-2:]
+
+        x_min, y_min, x_max, y_max = self.cheetah_geom_dict[self.panel]
+        for x, y in found_list:
+            x -= x_min
+            y -= y_min
+
+            # Transform...
+            coord_tuple = (y, x)
+            y, x = coord_img_to_crop(coord_tuple, size_img_tuple, size_crop_tuple)
+
+            x_bottom_left = int(x - offset)
+            y_bottom_left = int(y - offset)
+
+            rec_obj = mpatches.Rectangle((x_bottom_left, y_bottom_left), 
+                                         2 * offset, 2 * offset, 
+                                         linewidth = self.linewidth, 
+                                         edgecolor = 'yellow', 
+                                         facecolor='none')
+            ax_img.add_patch(rec_obj)
+
+
+
     def plot_indexed(self):
         indexed_list = self.indexed_list
         offset = 4
@@ -318,6 +348,37 @@ class SanityChecker:
         for x, y in indexed_list:
             x -= x_min
             y -= y_min
+
+            x_bottom_left = int(x - offset)
+            y_bottom_left = int(y - offset)
+
+            ## rec_obj = mpatches.Rectangle((x_bottom_left, y_bottom_left), 
+            ##                              2 * offset, 2 * offset, 
+            x = int(x)
+            y = int(y)
+            rec_obj = mpatches.Circle((x, y), offset,
+                                         linewidth = self.linewidth, 
+                                         edgecolor = 'cyan', 
+                                         facecolor='none')
+            ax_img.add_patch(rec_obj)
+
+        # BAD CODING PRACTICE, not good for maintainence, change it later!!!
+        ax_img = self.ax_list[3]
+
+        img  = self.img
+        mask = self.mask_predicted
+
+        size_img_tuple  = img.shape[-2:]
+        size_crop_tuple = mask.shape[-2:]
+
+        x_min, y_min, x_max, y_max = self.cheetah_geom_dict[self.panel]
+        for x, y in indexed_list:
+            x -= x_min
+            y -= y_min
+
+            # Transform...
+            coord_tuple = (y, x)
+            y, x = coord_img_to_crop(coord_tuple, size_img_tuple, size_crop_tuple)
 
             x_bottom_left = int(x - offset)
             y_bottom_left = int(y - offset)
@@ -359,6 +420,31 @@ class SanityChecker:
             ax_img.add_patch(rec_obj)
 
 
+        # BAD CODING PRACTICE, not good for maintainence, change it later!!!
+        ax_img = self.ax_list[3]
+
+        img  = self.img
+        mask = self.mask_predicted
+
+        size_img_tuple  = img.shape[-2:]
+        size_crop_tuple = mask.shape[-2:]
+
+        x_min, y_min, x_max, y_max = self.cheetah_geom_dict[self.panel]
+        for x, y in peak_list:
+            x = int(x) - x_min
+            y = int(y) - y_min
+
+            # Transform...
+            coord_tuple = (y, x)
+            y, x = coord_img_to_crop(coord_tuple, size_img_tuple, size_crop_tuple)
+
+            rec_obj = mpatches.Circle((x, y), offset // 2,
+                                      linewidth = self.linewidth, 
+                                      edgecolor = 'magenta', 
+                                      facecolor='none')
+            ax_img.add_patch(rec_obj)
+
+
     def plot_mask(self):
         mask = self.mask
         size_y, size_x = mask.shape[-2:]
@@ -393,7 +479,7 @@ class SanityChecker:
 
 
 
-    def plot_mask_predicted(self):
+    def plot_mask_predicted_overlay(self):
         img  = self.img_true
         mask = self.mask_predicted
         size_y, size_x = mask.shape[-2:]
@@ -404,8 +490,11 @@ class SanityChecker:
         ax_img.invert_yaxis()
 
         ax_img = self.ax_list[3]
-        im = ax_img.imshow(mask, vmin = 0, vmax = 1, alpha = 0.6)
+        im = ax_img.imshow(mask, vmin = 0, vmax = 1, alpha = 0.8)
+        ## cmap1 = mcolors.ListedColormap(['none', '#06ff00'])
         cmap1 = mcolors.ListedColormap(['none', 'red'])
+        ## cmap1 = mcolors.ListedColormap(['black', 'none'])
+        ## cmap1 = mcolors.ListedColormap(['black', 'white'])
         ## im.set_cmap('Greens')
         im.set_cmap(cmap1)
         ax_img.invert_yaxis()
@@ -418,8 +507,9 @@ class SanityChecker:
 
 
 
-    def plot_mask_true(self):
-        mask = self.mask_true
+    def plot_mask_predicted(self):
+        ## mask = self.mask_true
+        mask = self.mask_predicted
         size_y, size_x = mask.shape[-2:]
 
         ax_img = self.ax_list[4]
@@ -433,6 +523,22 @@ class SanityChecker:
         ax_img.set_xlim([x_bmin - b_offset, x_bmax + b_offset])
         ax_img.set_ylim([y_bmin - b_offset, y_bmax + b_offset])
 
+
+
+    ## def plot_mask_true(self):
+    ##     mask = self.mask_true
+    ##     size_y, size_x = mask.shape[-2:]
+
+    ##     ax_img = self.ax_list[4]
+    ##     im = ax_img.imshow(mask, vmin = 0, vmax = 1)
+    ##     im.set_cmap('gray')
+    ##     ax_img.invert_yaxis()
+
+    ##     b_offset = self.b_offset
+    ##     y_bmin, x_bmin = 0, 0
+    ##     y_bmax, x_bmax = size_y, size_x
+    ##     ax_img.set_xlim([x_bmin - b_offset, x_bmax + b_offset])
+    ##     ax_img.set_ylim([y_bmin - b_offset, y_bmax + b_offset])
 
 
     def adjust_margin(self):
@@ -460,8 +566,9 @@ class SanityChecker:
         self.plot_indexed()
         self.plot_peaks()
         self.plot_mask()
+        self.plot_mask_predicted_overlay()
         self.plot_mask_predicted()
-        self.plot_mask_true()
+        ## self.plot_mask_true()
 
         ## plt.tight_layout()
         self.adjust_margin()
@@ -470,6 +577,7 @@ class SanityChecker:
         plt.suptitle(title, y = 0.95)
         if not isinstance(filename, str): 
             plt.show()
+            plt.close()
         else:
             # Set up drc...
             DRCPDF         = "pdfs"
@@ -483,6 +591,7 @@ class SanityChecker:
 
             # Export...
             plt.savefig(path_pdf, dpi = 600)
+            plt.close()
 
 
 
@@ -493,7 +602,8 @@ class SanityChecker:
 ## timestamp = "2022_0826_2142_15"
 ## timestamp = "2022_0826_2151_39"
 ## timestamp = "2022_0826_2204_12"
-timestamp = "2022_0826_2205_23"
+## timestamp = "2022_0826_2205_23"
+timestamp = "2022_0826_2359_14"
 
 # Set up parameters for an experiment...
 fl_csv               = 'datasets.csv'
@@ -564,11 +674,15 @@ if mpi_rank == 0:
                                   path_chkpt = path_chkpt, 
                                   figsize    = (32,15) )
     ## for idx in (3, 6, 19, 38):
-    for idx in range(10):
+    for idx in random.sample(range(size_sample_train), k = 20):
+        print(idx)
+        fl_pdf = f'pf.trained.idx{idx:06d}'
         disp_manager.show(idx)
+        disp_manager.show(idx, linewidth = 0.1, filename = fl_pdf)
 
-    ## idx = 3
-    ## fl_pdf = 'pf.init'
-    ## fl_pdf = 'pf.trained'
+    ## idx = 56
+    ## idx = 159
+    ## ## fl_pdf = 'pf.init'
+    ## fl_pdf = f'pf.trained.idx{idx:06d}'
     ## disp_manager.show(idx)
     ## disp_manager.show(idx, linewidth = 0.1, filename = fl_pdf)

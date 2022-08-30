@@ -541,11 +541,11 @@ class SFXPanelDatasetMini(SFXPanelDataset):
         logger.info("___/ Dataset size after splitting \___")
         logger.info(f"KV - size : {len(self.metadata_list)}")
 
-        self.form_miniset()
+        if self.size_sample is not None: self.form_miniset()
 
 
     def __len__(self):
-        return self.size_sample
+        return len(self.metadata_list)
 
 
     def __getitem__(self, idx):

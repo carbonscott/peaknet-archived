@@ -329,12 +329,23 @@ class GeomInterpreter:
         self.geom_dict = geom_dict
 
 
-    def interpret(self):
+    def to_cheetah(self):
         geom_dict = self.geom_dict
 
         cheetah_geom_dict = {}
         for panel, coord_dict in geom_dict.items():
             x_min, y_min, x_max, y_max = coord_dict.values()
             cheetah_geom_dict[panel] = (x_min, y_min, x_max, y_max)
+
+        return cheetah_geom_dict
+
+
+    def to_python(self):
+        geom_dict = self.geom_dict
+
+        cheetah_geom_dict = {}
+        for panel, coord_dict in geom_dict.items():
+            x_min, y_min, x_max, y_max = coord_dict.values()
+            cheetah_geom_dict[panel] = (x_min, y_min, x_max + 1, y_max + 1)
 
         return cheetah_geom_dict

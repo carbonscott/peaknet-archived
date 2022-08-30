@@ -258,6 +258,8 @@ class SFXPanelDataset(Dataset):
                         if len(neighbor_list) == 0: continue
 
                         x, y = found_list[idx]
+                        ## x += 0.5    # ...round up if fraction > 0.5, otherwise round down
+                        ## y += 0.5
                         x = int(x)
                         y = int(y)
 
@@ -354,6 +356,8 @@ class SFXPanelDataset(Dataset):
                     if len(neighbor_list) == 0: continue
 
                     x, y = found_list[idx]
+                    ## x += 0.5    # ...round up if fraction > 0.5, otherwise round down
+                    ## y += 0.5
                     x = int(x)
                     y = int(y)
 
@@ -455,7 +459,8 @@ class SFXPanelDataset(Dataset):
         # Get geom information...
         stream_dict       = self.stream_cache_dict[fl_stream]
         geom_dict         = stream_dict['geom']
-        cheetah_geom_dict = GeomInterpreter(geom_dict).interpret()
+        ## cheetah_geom_dict = GeomInterpreter(geom_dict).to_cheetah()
+        python_geom_dict = GeomInterpreter(geom_dict).to_python()
 
         # Load an image...
         # From scratch and cache it
@@ -472,7 +477,8 @@ class SFXPanelDataset(Dataset):
         raw_img = self.raw_img_cache_dict[cache_key]
 
         # Select an area as a panel image and a masked panel...
-        x_min, y_min, x_max, y_max = cheetah_geom_dict[panel]
+        ## x_min, y_min, x_max, y_max = cheetah_geom_dict[panel]
+        x_min, y_min, x_max, y_max = python_geom_dict[panel]
         panel_img = raw_img[..., y_min : y_max, x_min : x_max]
 
         # Create a mask that works as the label...
@@ -482,7 +488,7 @@ class SFXPanelDataset(Dataset):
         peak_per_panel_list = self.peak_list[idx]
         for peak in peak_per_panel_list:
             # Unack coordiante...
-            x, y  = peak
+            x, y = peak
 
             # Get local coordinate for the panel...
             x = x - x_min

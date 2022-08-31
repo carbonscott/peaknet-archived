@@ -258,10 +258,8 @@ class SFXPanelDataset(Dataset):
                         if len(neighbor_list) == 0: continue
 
                         x, y = found_list[idx]
-                        ## x += 0.5    # ...round up if fraction > 0.5, otherwise round down
-                        ## y += 0.5
-                        x = int(x)
-                        y = int(y)
+                        ## x = int(x)
+                        ## y = int(y)
 
                         peak_per_panel_list.append((x, y))
 
@@ -356,10 +354,8 @@ class SFXPanelDataset(Dataset):
                     if len(neighbor_list) == 0: continue
 
                     x, y = found_list[idx]
-                    ## x += 0.5    # ...round up if fraction > 0.5, otherwise round down
-                    ## y += 0.5
-                    x = int(x)
-                    y = int(y)
+                    ## x = int(x)
+                    ## y = int(y)
 
                     peak_per_panel_list.append((x, y))
 
@@ -511,10 +507,6 @@ class SFXPanelDataset(Dataset):
             panel_label[..., patch_y_min : patch_y_max, patch_x_min : patch_x_max][~(patch_img < threshold)] = 1.0
 
         if verbose: logger.info(f'DATA LOADING - {fl_cxi} {event_crystfel} {panel}.')
-
-        ## if self.add_channel_ok: 
-        ##     panel_img   = panel_img  [None,]
-        ##     panel_label = panel_label[None,]
 
         return panel_img, panel_label
 

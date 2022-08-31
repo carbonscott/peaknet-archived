@@ -25,18 +25,29 @@ def center_crop(img, size_y_crop, size_x_crop):
               y_min_img : y_min_img + size_y_img,
               x_min_img : x_min_img + size_x_img] = img
 
-    # Crop...
+    # Find crop range...
+    # Min
     y_min_crop = (size_y_super - size_y_crop) // 2
     x_min_crop = (size_x_super - size_x_crop) // 2
 
-    return img_super[...,
-                     y_min_crop : y_min_crop + size_y_crop,
-                     x_min_crop : x_min_crop + size_x_crop]
+    # Max
+    y_max_crop = y_min_crop + size_y_crop
+    x_max_crop = x_min_crop + size_x_crop
+
+    # Crop the image area...
+    img_crop =  img_super[...,
+                          y_min_crop : y_max_crop,
+                          x_min_crop : x_max_crop]
+
+    return img_crop
 
 
 
 
 def coord_img_to_crop(coord_tuple, size_img_tuple, size_crop_tuple):
+    '''
+    Need some unit test.
+    '''
     # Unpack all inputs...
     y          , x           = coord_tuple
     size_y_img ,  size_x_img = size_img_tuple
@@ -45,15 +56,5 @@ def coord_img_to_crop(coord_tuple, size_img_tuple, size_crop_tuple):
     # Transform...
     y_crop = (size_y_crop - size_y_img) / 2 + y
     x_crop = (size_x_crop - size_x_img) / 2 + x
-
-    y_crop += 0.5
-    x_crop += 0.5
-
-    y_crop = int(y_crop)
-    x_crop = int(x_crop)
-
-    ## # [NOT ENTIRELY SURE] Correct for one pixel...
-    ## y_crop += 1
-    ## x_crop += 1
 
     return y_crop, x_crop

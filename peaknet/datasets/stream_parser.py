@@ -329,23 +329,41 @@ class GeomInterpreter:
         self.geom_dict = geom_dict
 
 
-    def to_cheetah(self):
+    def to_cheetah(self, offset = 0):
         geom_dict = self.geom_dict
 
         cheetah_geom_dict = {}
         for panel, coord_dict in geom_dict.items():
             x_min, y_min, x_max, y_max = coord_dict.values()
+            x_min += offset
+            y_min += offset
+            x_max += offset
+            y_max += offset
             cheetah_geom_dict[panel] = (x_min, y_min, x_max, y_max)
 
         return cheetah_geom_dict
 
 
-    def to_python(self):
+    def to_python(self, offset = 0):
+        '''
+        Cheetah range is closed on the right, but Python range is open.
+        '''
         geom_dict = self.geom_dict
 
         cheetah_geom_dict = {}
         for panel, coord_dict in geom_dict.items():
             x_min, y_min, x_max, y_max = coord_dict.values()
-            cheetah_geom_dict[panel] = (x_min, y_min, x_max + 1, y_max + 1)
+
+            # Handle offset...
+            x_min += offset
+            y_min += offset
+            x_max += offset
+            y_max += offset
+
+            # Include the rightmost coordinate by incrementing one...
+            x_max += 1
+            y_max += 1
+
+            cheetah_geom_dict[panel] = (x_min, y_min, x_max, y_max)
 
         return cheetah_geom_dict

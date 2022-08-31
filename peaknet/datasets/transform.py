@@ -43,11 +43,17 @@ def coord_img_to_crop(coord_tuple, size_img_tuple, size_crop_tuple):
     size_y_crop, size_x_crop = size_crop_tuple
 
     # Transform...
-    y_crop = (size_y_crop - size_y_img) // 2 + y
-    x_crop = (size_x_crop - size_x_img) // 2 + x
+    y_crop = (size_y_crop - size_y_img) / 2 + y
+    x_crop = (size_x_crop - size_x_img) / 2 + x
+
+    y_crop += 0.5
+    x_crop += 0.5
+
+    y_crop = int(y_crop)
+    x_crop = int(x_crop)
 
     ## # [NOT ENTIRELY SURE] Correct for one pixel...
     ## y_crop += 1
-    x_crop += 1
+    ## x_crop += 1
 
     return y_crop, x_crop

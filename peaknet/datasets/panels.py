@@ -258,8 +258,6 @@ class SFXPanelDataset(Dataset):
                         if len(neighbor_list) == 0: continue
 
                         x, y = found_list[idx]
-                        ## x = int(x)
-                        ## y = int(y)
 
                         peak_per_panel_list.append((x, y))
 
@@ -354,8 +352,6 @@ class SFXPanelDataset(Dataset):
                     if len(neighbor_list) == 0: continue
 
                     x, y = found_list[idx]
-                    ## x = int(x)
-                    ## y = int(y)
 
                     peak_per_panel_list.append((x, y))
 
@@ -364,6 +360,37 @@ class SFXPanelDataset(Dataset):
                 peak_list.append(peak_per_panel_list)
 
         return metadata_list, peak_list
+
+
+    def calc_peak_SNR(self, img_peak, inner_box_radius_offset = 1):
+        size_y, size_x = img_peak.shape[-2:]
+
+        y_min_inner_box = 0      + inner_box_radius_offset
+        x_min_inner_box = 0      + inner_box_radius_offset
+        y_max_inner_box = size_y - inner_box_radius_offset
+        x_max_inner_box = size_x - inner_box_radius_offset
+
+        select_matrix = np.zeros((size_y, size_x), dtype = bool)
+
+        # Create a selection matrix for extract signal peaks...
+        select_matrix[y_min_inner_box : y_max_inner_box,
+                      x_min_inner_box : x_max_inner_box] = True
+
+        # Choose signal pixel and bg pixel...
+        img_signal = img_peak[ select_matrix]
+        img_bg     = img_peak[~select_matrix]
+
+        # Calculate the mean bg...
+        mean_img_bg = np.mean(img_bg)
+
+        # Background subtraction...
+        img_signal -= mean_img_bg
+        mean_img_signal = np.mean(img_signal)
+
+        # Calculate signal noise ratio...
+        snr = mean_img_signal / mean_img_bg
+
+        return snr
 
 
     def __len__(self):

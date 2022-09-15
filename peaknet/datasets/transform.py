@@ -80,3 +80,26 @@ def coord_img_to_crop(coord_tuple, size_img_tuple, size_crop_tuple, offset_tuple
         x_crop += x_offset
 
     return y_crop, x_crop
+
+
+
+
+def coord_crop_to_img(coord_tuple, size_img_tuple, size_crop_tuple, offset_tuple = ()):
+    '''
+    Need some unit test.
+    '''
+    # Unpack all inputs...
+    y          , x           = coord_tuple
+    size_y_img ,  size_x_img = size_img_tuple
+    size_y_crop, size_x_crop = size_crop_tuple
+
+    # Transform...
+    y_crop = y - (size_y_crop - size_y_img) / 2
+    x_crop = x - (size_x_crop - size_x_img) / 2
+
+    if len(offset_tuple) == 2:
+        y_offset, x_offset = offset_tuple
+        y_crop += y_offset
+        x_crop += x_offset
+
+    return y_crop, x_crop

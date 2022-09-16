@@ -159,7 +159,7 @@ class SFXPanelDataset(Dataset):
 
     def parse_stream(self, fl_stream):
         # Initialize the object to return...
-        stream_per_file_dict = None
+        stream_dict = None
 
         # Find the basename of the stream file...
         basename_stream = os.path.basename(fl_stream)
@@ -175,20 +175,20 @@ class SFXPanelDataset(Dataset):
         # Obtain key information from stream by loading the pickle file if it exists...
         if os.path.exists(path_pickle):
             with open(path_pickle, 'rb') as fh:
-                stream_per_file_dict = pickle.load(fh)
+                stream_dict = pickle.load(fh)
 
         # Otherwise, parse the stream file...
         else:
             # Employ stream parser to extract key info from stream...
             stream_parser = StreamParser(fl_stream)
             stream_parser.parse()
-            stream_per_file_dict = stream_parser.stream_per_file_dict
+            stream_dict = stream_parser.stream_dict
 
             # Save the stream result in a pickle file...
             with open(path_pickle, 'wb') as fh:
-                pickle.dump(stream_per_file_dict, fh, protocol = pickle.HIGHEST_PROTOCOL)
+                pickle.dump(stream_dict, fh, protocol = pickle.HIGHEST_PROTOCOL)
 
-        return stream_per_file_dict
+        return stream_dict
 
 
     def get_raw_peak(self, idx):
@@ -200,11 +200,11 @@ class SFXPanelDataset(Dataset):
         fl_stream, fl_cxi, event_crystfel, panel = self.metadata_list[idx]
 
         # Fetch stream either from scratch or from a cached dictionary...
-        stream_per_file_dict = self.parse_stream(fl_stream) if not fl_stream in self.stream_cache_dict \
+        stream_dict = self.parse_stream(fl_stream) if not fl_stream in self.stream_cache_dict \
                                                             else self.stream_cache_dict[fl_stream]
 
         # Get the right chunk
-        panel_dict = stream_per_file_dict['chunk'][fl_cxi][event_crystfel]
+        panel_dict = stream_dict['chunk'][fl_cxi][event_crystfel]
 
         # Find all peaks...
         peak_saved_dict        = panel_dict[panel]
@@ -216,11 +216,11 @@ class SFXPanelDataset(Dataset):
 
     def extract_metadata_and_labeled_peak_from_streamfile(self, fl_stream):
         # Fetch stream either from scratch or from a cached dictionary...
-        stream_per_file_dict = self.parse_stream(fl_stream) if not fl_stream in self.stream_cache_dict \
+        stream_dict = self.parse_stream(fl_stream) if not fl_stream in self.stream_cache_dict \
                                                             else self.stream_cache_dict[fl_stream]
 
         # Get the chunk...
-        chunk_dict = stream_per_file_dict['chunk']
+        chunk_dict = stream_dict['chunk']
 
         # Work on each cxi file...
         metadata_list = []
@@ -257,11 +257,11 @@ class SFXPanelDataset(Dataset):
         mpi_data_tag = self.mpi_data_tag
 
         # Fetch stream either from scratch or from a cached dictionary...
-        stream_per_file_dict = self.parse_stream(fl_stream) if not fl_stream in self.stream_cache_dict \
+        stream_dict = self.parse_stream(fl_stream) if not fl_stream in self.stream_cache_dict \
                                                             else self.stream_cache_dict[fl_stream]
 
         # Get the chunk...
-        chunk_dict = stream_per_file_dict['chunk']
+        chunk_dict = stream_dict['chunk']
 
         for fl_cxi, event_crystfel_list in chunk_dict.items():
             # Split the workload...

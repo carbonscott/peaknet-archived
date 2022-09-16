@@ -201,7 +201,7 @@ class SFXPanelDataset(Dataset):
 
         # Fetch stream either from scratch or from a cached dictionary...
         stream_dict = self.parse_stream(fl_stream) if not fl_stream in self.stream_cache_dict \
-                                                            else self.stream_cache_dict[fl_stream]
+                                                   else self.stream_cache_dict[fl_stream]
 
         # Get the right chunk
         panel_dict = stream_dict['chunk'][fl_cxi][event_crystfel]
@@ -217,7 +217,7 @@ class SFXPanelDataset(Dataset):
     def extract_metadata_and_labeled_peak_from_streamfile(self, fl_stream):
         # Fetch stream either from scratch or from a cached dictionary...
         stream_dict = self.parse_stream(fl_stream) if not fl_stream in self.stream_cache_dict \
-                                                            else self.stream_cache_dict[fl_stream]
+                                                   else self.stream_cache_dict[fl_stream]
 
         # Get the chunk...
         chunk_dict = stream_dict['chunk']
@@ -258,7 +258,7 @@ class SFXPanelDataset(Dataset):
 
         # Fetch stream either from scratch or from a cached dictionary...
         stream_dict = self.parse_stream(fl_stream) if not fl_stream in self.stream_cache_dict \
-                                                            else self.stream_cache_dict[fl_stream]
+                                                   else self.stream_cache_dict[fl_stream]
 
         # Get the chunk...
         chunk_dict = stream_dict['chunk']

@@ -97,18 +97,32 @@ class SFXPanelDataset(Dataset):
                 self.fl_stream_list.append(fl_stream)
 
         # Obtain all indexed SFX event from stream files...
+        # [COMMENT] I tried not to have repeating code when dealing with MPI on/off
+        # but I will keep it like this for now.  Room to improve.
         for fl_stream in self.fl_stream_list:
-            # Get the stream object and save it to a global dictionary...
-            if not fl_stream in self.stream_cache_dict:
-                self.stream_cache_dict[fl_stream] = self.parse_stream(fl_stream)
-
             # Create a list of data entry from a stream file...
             # With MPI
             if self.mpi_comm is not None:
+                # Sync stream cache...
+                if self.mpi_rank == 0:
+                    # Get the stream object and save it to a global dictionary...
+                    if not fl_stream in self.stream_cache_dict:
+                        self.stream_cache_dict[fl_stream] = self.parse_stream(fl_stream)
+
+                    # Sync the cache across workers...
+                    for i in range(1, self.mpi_size, 1):
+                        data_to_send = self.stream_cache_dict[fl_stream]
+                        self.mpi_comm.send(data_to_send, dest = i, tag = self.mpi_data_tag)
+
+                if self.mpi_rank !=0:
+                    data_received = self.mpi_comm.recv(source = 0, tag = self.mpi_data_tag)
+                    self.stream_cache_dict[fl_stream] = data_received
+
+                # Get metadata and label...
                 metadata_per_stream, peak_list_per_stream = \
                     self.mpi_extract_metadata_and_labeled_peak_from_streamfile(fl_stream)
 
-                # Sync across workers for completeness of the class object
+                # Sync metadata and label across workers for completeness of the class object
                 if self.mpi_rank == 0:
                     for i in range(1, self.mpi_size, 1):
                         data_to_send = (metadata_per_stream, peak_list_per_stream)
@@ -120,6 +134,10 @@ class SFXPanelDataset(Dataset):
 
             # Without MPI
             else:
+                # Get the stream object and save it to a global dictionary...
+                if not fl_stream in self.stream_cache_dict:
+                    self.stream_cache_dict[fl_stream] = self.parse_stream(fl_stream)
+
                 metadata_per_stream, peak_list_per_stream = \
                     self.extract_metadata_and_labeled_peak_from_streamfile(fl_stream)
 

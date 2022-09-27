@@ -1,4 +1,4 @@
-![](./figures/pf.inference.cxic0415.85.018537.png)
+![](./figures/inference.png)
 
 ## References
 

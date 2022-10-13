@@ -7,10 +7,13 @@ import random
 import numpy as np
 import h5py
 
+import time
+
 from scipy import ndimage
 
 from peaknet.datasets.utils           import PsanaImg
-from peaknet.methods.unet             import UNet
+## from peaknet.methods.unet             import UNet
+from peaknet.methods.unet_simple      import UNet
 from peaknet.model                    import ConfigPeakFinderModel, PeakFinderModel
 from peaknet.datasets.stream_parser   import GeomInterpreter
 from peaknet.datasets.transform       import center_crop, coord_img_to_crop, coord_crop_to_img
@@ -47,6 +50,8 @@ class PsanaPeakFinder:
 
         self.psana_img = PsanaImg(exp, run, access_mode, detector_name)
 
+        self.multipanel_mask = self.psana_img.create_bad_pixel_mask()
+
         # Load model to gpus if available...
         self.device = 'cpu'
         if self.path_chkpt is not None and torch.cuda.is_available():
@@ -64,8 +69,9 @@ class PsanaPeakFinder:
 
     def fetch_img_per_event(self, event):
         # Load image...
-        panel_list = self.psana_img.get(event, None, 'calib')
-        img        = self.convert_psana_to_cheetah(panel_list)
+        multipanel_img = self.psana_img.get(event, None, 'calib')
+        multipanel_img_masked = self.multipanel_mask * multipanel_img
+        img = self.convert_psana_to_cheetah(multipanel_img_masked)
 
         return img
 
@@ -74,10 +80,12 @@ class PsanaPeakFinder:
         # Load image...
         img = self.fetch_img_per_event(event)
         img = img[None, ]
+        ## img = img[:, None, ]
 
         # Add a fake batch dim and move the data to gpu if available...
         # The model is trained with the extra dimension
-        batch_img  = torch.Tensor(img [None,])
+        batch_img  = torch.Tensor(img[None,])
+        ## batch_img  = torch.Tensor(img)
         batch_img  = batch_img.to(self.device)
 
         # Find the predicted mask...
@@ -90,7 +98,8 @@ class PsanaPeakFinder:
 
         # Save them to cpu...
         batch_mask_predicted = batch_mask_predicted.cpu().detach().numpy()
-        mask_predicted       = batch_mask_predicted.reshape(*batch_mask_predicted.shape[-3:])    # Remove fake batch layer
+        ## mask_predicted       = batch_mask_predicted.reshape(*batch_mask_predicted.shape[-3:])    # Remove fake batch layer
+        mask_predicted       = np.squeeze(batch_mask_predicted, axis = 1)    # Remove fake batch layer
 
         # Remove the extra dimension required for inference
         mask_predicted = mask_predicted[0]
@@ -228,7 +237,8 @@ class PsanaPeakFinder:
         batch_label, batch_num_feature = ndimage.label(batch_mask, structure = structure)
 
         # Calculate batch center of mass...
-        batch_center_of_mass = ndimage.center_of_mass(batch_mask, batch_label, range(batch_num_feature))
+        ## batch_center_of_mass = ndimage.center_of_mass(batch_mask, batch_label, range(batch_num_feature))
+        batch_center_of_mass = ndimage.maximum_position(batch_mask, batch_label, range(batch_num_feature))
 
         return batch_center_of_mass
 
@@ -306,7 +316,12 @@ class PsanaPeakFinder:
         for event in event_list:
             print(f"Processing {event}...")
 
+            time_start = time.time()
             peak_per_event_list = self.find_peak_per_event(event)
+            time_end = time.time()
+
+            time_delta = time_end - time_start
+            print(f"Time delta: {time_delta} second.")
 
             if len(peak_per_event_list) < min_num_peak: continue
 
@@ -437,13 +452,15 @@ def convert_peaks_to_psana(row2d, col2d) :
     return s, r, c
 
 
-timestamp = "2022_0908_1013_52"    # frac_train = 0.5, pos_weight = 2, pretty good.
+## timestamp = "2022_0908_1013_52"    # frac_train = 0.5, pos_weight = 2, pretty good.
+timestamp = "2022_1012_1131_43"    # frac_train = 0.5, pos_weight = 2, pretty good.
+
+base_channels = 8
 
 exp           = 'cxic0415'
 run           = 101
 
-## event_list    = [ 5858, 37489, 18537 ]
-event_list    = range(100)
+event_list    = []
 
 photon_energy = 12688.890590380644    # eV
 encoder_value = -450.0034
@@ -451,10 +468,11 @@ adu_threshold = 100
 
 access_mode   = 'idx'
 detector_name = 'CxiDs1.0:Cspad.0'
-fl_cxi        = f'pf.{exp}.{run}.cxi'
+## fl_cxi        = f'pf.{exp}.{run}.{timestamp}.center_of_mass.cxi'
+fl_cxi        = f'pf.{exp}.{run}.{timestamp}.maxpos.cxi'
 
 # Config the model...
-method = UNet(in_channels = 1, out_channels = 1)
+method = UNet(in_channels = 1, out_channels = 1, base_channels = base_channels)
 pos_weight = 2.0
 config_peakfinder = ConfigPeakFinderModel( method     = method,
                                            pos_weight = pos_weight, )
@@ -489,4 +507,4 @@ config_pf = ConfigPeakFinder( model         = model,
                               encoder_value = encoder_value,
                               adu_threshold = adu_threshold, )
 pf = PsanaPeakFinder(config_pf)
-pf.save_peak_to_cxi(event_list = [], min_num_peak = 100)
+pf.save_peak_to_cxi(event_list = event_list, min_num_peak = 15)

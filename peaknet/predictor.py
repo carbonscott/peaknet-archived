@@ -148,6 +148,7 @@ class Predictor:
         # Fetch labels...
         batch_label, batch_num_feature = ndimage.label(batch_mask, structure = structure)
 
+
         # Calculate batch center of mass...
         batch_center_of_mass = ndimage.center_of_mass(batch_mask, batch_label, range(batch_num_feature))
         ## batch_center_of_mass = ndimage.maximum_position(batch_mask, batch_label, range(batch_num_feature))

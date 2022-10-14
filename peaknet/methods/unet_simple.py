@@ -20,7 +20,7 @@ Here is the [training code](experiment.html) for an experiment that trains a U-N
 on [Carvana dataset](carvana.html).
 """
 import torch
-import torchvision.transforms.functional
+## import torchvision.transforms.functional
 from torch import nn
 
 

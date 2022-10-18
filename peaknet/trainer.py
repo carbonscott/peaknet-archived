@@ -51,7 +51,7 @@ class Trainer:
         torch.save(model.state_dict(), self.config_train.path_chkpt)
 
 
-    def train(self, is_save_checkpoint = True, epoch = None):
+    def train(self, saves_checkpoint = True, epoch = None):
         """ The training loop.  """
 
         # Load model and training configuration...
@@ -93,4 +93,4 @@ class Trainer:
         logger.info(f"MSG - epoch {epoch}, loss mean {loss_epoch_mean:.8f}")
 
         # Save the model state
-        if is_save_checkpoint: self.save_checkpoint()
+        if saves_checkpoint: self.save_checkpoint()

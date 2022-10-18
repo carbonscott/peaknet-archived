@@ -112,37 +112,59 @@ class UNet(nn.Module):
     """
     ## U-Net
     """
-    def __init__(self, in_channels: int, out_channels: int):
+    def __init__(self, in_channels: int, out_channels: int, base_channels = 64, num_downsample_layer = None, requires_nn_tracker = False):
         """
         :param in_channels: number of channels in the input image
         :param out_channels: number of channels in the result feature map
         """
         super().__init__()
 
+
         # Double convolution layers for the contracting path.
         # The number of features gets doubled at each step starting from $64$.
+        downsample_layer_list = [(in_channels, base_channels),
+                                 (base_channels, base_channels * 2),
+                                 (base_channels * 2, base_channels * 4),
+                                 (base_channels * 4, base_channels * 8)]
+        if num_downsample_layer is None: num_downsample_layer = len(downsample_layer_list)
+        if isinstance(num_downsample_layer, int):
+            num_downsample_layer = max(1, num_downsample_layer)
+            num_downsample_layer = min(len(downsample_layer_list), num_downsample_layer)
         self.down_conv = nn.ModuleList([DoubleConvolution(i, o) for i, o in
-                                        [(in_channels, 64), (64, 128), (128, 256), (256, 512)]])
+                                        downsample_layer_list[:num_downsample_layer]
+                                       ])
         # Down sampling layers for the contracting path
         self.down_sample = nn.ModuleList([DownSample() for _ in range(4)])
 
         # The two convolution layers at the lowest resolution (the bottom of the U).
-        self.middle_conv = DoubleConvolution(512, 1024)
+        self.middle_conv = DoubleConvolution(base_channels * 2**(num_downsample_layer-1), base_channels * 2**(num_downsample_layer))
 
         # Up sampling layers for the expansive path.
         # The number of features is halved with up-sampling.
+        upsample_layer_list = [(base_channels * 16, base_channels * 8), 
+                               (base_channels * 8,  base_channels * 4), 
+                               (base_channels * 4,  base_channels * 2), 
+                               (base_channels * 2,  base_channels)]
+        size_upsample_layer_list = len(upsample_layer_list)
+        num_upsample_layer = size_upsample_layer_list - num_downsample_layer
         self.up_sample = nn.ModuleList([UpSample(i, o) for i, o in
-                                        [(1024, 512), (512, 256), (256, 128), (128, 64)]])
+                                        upsample_layer_list[num_upsample_layer:]
+                                       ])
         # Double convolution layers for the expansive path.
         # Their input is the concatenation of the current feature map and the feature map from the
         # contracting path. Therefore, the number of input features is double the number of features
         # from up-sampling.
         self.up_conv = nn.ModuleList([DoubleConvolution(i, o) for i, o in
-                                      [(1024, 512), (512, 256), (256, 128), (128, 64)]])
+                                      upsample_layer_list[num_upsample_layer:]
+                                     ])
         # Crop and concatenate layers for the expansive path.
         self.concat = nn.ModuleList([CropAndConcat() for _ in range(4)])
         # Final $1 \times 1$ convolution layer to produce the output
-        self.final_conv = nn.Conv2d(64, out_channels, kernel_size=1)
+        self.final_conv = nn.Conv2d(base_channels, out_channels, kernel_size=1)
+
+        if requires_nn_tracker:
+            self.nn_tracker_dict = {}
+            self.forward = self.forward_and_track
 
     def forward(self, x: torch.Tensor):
         """
@@ -173,6 +195,61 @@ class UNet(nn.Module):
 
         # Final $1 \times 1$ convolution layer
         x = self.final_conv(x)
+
+        #
+        return x
+
+
+    def forward_and_track(self, x: torch.Tensor, timestamp_tuple = ()):
+        """
+        :param x: input image
+        """
+        # To collect the outputs of contracting path for later concatenation with the expansive path.
+        # Timestamp the tracker...
+        self.nn_tracker_dict[timestamp_tuple] = {}
+
+        pass_through = []
+        # Contracting path
+        for i in range(len(self.down_conv)):
+            # Track downconv...
+            self.nn_tracker_dict[timestamp_tuple][(i, 'prev_down_conv')] = x
+            x = self.down_conv[i](x)
+            self.nn_tracker_dict[timestamp_tuple][(i, 'down_conv')] = x
+
+            # Collect the output
+            pass_through.append(x)
+
+            # Down-sample
+            self.nn_tracker_dict[timestamp_tuple][(i, 'prev_down_sample')] = x
+            x = self.down_sample[i](x)
+            self.nn_tracker_dict[timestamp_tuple][(i, 'down_sample')] = x
+
+        # Two $3 \times 3$ convolutional layers at the bottom of the U-Net
+        self.nn_tracker_dict[timestamp_tuple]['prev_middle_conv'] = x
+        x = self.middle_conv(x)
+        self.nn_tracker_dict[timestamp_tuple]['middle_conv'] = x
+
+        # Expansive path
+        for i in range(len(self.up_conv)):
+            # Up-sample
+            self.nn_tracker_dict[timestamp_tuple][(i, 'prev_up_sample')] = x
+            x = self.up_sample[i](x)
+            self.nn_tracker_dict[timestamp_tuple][(i, 'up_sample')] = x
+
+            # Concatenate the output of the contracting path
+            self.nn_tracker_dict[timestamp_tuple][(i, 'prev_concat')] = x
+            x = self.concat[i](x, pass_through.pop())
+            self.nn_tracker_dict[timestamp_tuple][(i, 'concat')] = x
+
+            # Two $3 \times 3$ convolutional layers
+            self.nn_tracker_dict[timestamp_tuple][(i, 'prev_up_conv')] = x
+            x = self.up_conv[i](x)
+            self.nn_tracker_dict[timestamp_tuple][(i, 'up_conv')] = x
+
+        # Final $1 \times 1$ convolution layer
+        self.nn_tracker_dict[timestamp_tuple]['prev_final_conv'] = x
+        x = self.final_conv(x)
+        self.nn_tracker_dict[timestamp_tuple]['final_conv'] = x
 
         #
         return x

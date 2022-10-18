@@ -30,16 +30,21 @@ class ConfigTrainer:
 
 
 class Trainer:
-    def __init__(self, model, dataset_train, config_train):
+    def __init__(self, model, dataset_train, config_train, requires_param_tracker = False):
         self.model         = model
         self.dataset_train = dataset_train
         self.config_train  = config_train
+        self.requires_param_tracker = requires_param_tracker
 
         # Load data to gpus if available
         self.device = 'cpu'
         if torch.cuda.is_available():
             self.device = torch.cuda.current_device()
             self.model  = torch.nn.DataParallel(self.model).to(self.device)
+
+        # Enable param tracker???
+        if self.requires_param_tracker:
+            self.param_tracker_dict = {}
 
         return None
 
@@ -51,9 +56,7 @@ class Trainer:
         torch.save(model.state_dict(), self.config_train.path_chkpt)
 
 
-    def train(self, saves_checkpoint = True, epoch = None):
-        """ The training loop.  """
-
+    def train(self, saves_checkpoint = True, epoch = None, returns_loss = False):
         # Load model and training configuration...
         # Optimizer can be reconfigured next epoch
         model, config_train = self.model, self.config_train
@@ -71,13 +74,14 @@ class Trainer:
 
         # Train each batch...
         batch = tqdm.tqdm(enumerate(loader_train), total = len(loader_train), disable = config_train.tqdm_disable)
-        for step_id, entry in batch:
+        for idx_batch, entry in batch:
             # Unpack dataloader entry, where mask is the label...
-            ## batch_img, batch_mask, batch_metadata = entry
             batch_img, batch_mask = entry
             batch_img  = batch_img.to (self.device)
             batch_mask = batch_mask.to(self.device)
 
+            timestamp_train = (epoch, idx_batch)
+            self.model.timestamp_tuple = timestamp_train
             _, _, loss = self.model.forward(batch_img, batch_mask)
 
             optimizer.zero_grad()
@@ -87,10 +91,57 @@ class Trainer:
             loss_val = loss.cpu().detach().numpy()
             losses_epoch.append(loss_val)
 
-            logger.info(f"MSG - epoch {epoch}, batch {step_id:d}, loss {loss_val:.8f}")
+            logger.info(f"MSG - epoch {epoch}, batch {idx_batch:d}, loss {loss_val:.8f}")
 
         loss_epoch_mean = np.mean(losses_epoch)
         logger.info(f"MSG - epoch {epoch}, loss mean {loss_epoch_mean:.8f}")
 
         # Save the model state
         if saves_checkpoint: self.save_checkpoint()
+
+        return loss_epoch_mean if returns_loss else None
+
+
+    def train_and_track(self, saves_checkpoint = True, epoch = None, returns_loss = False):
+        # Load model and training configuration...
+        # Optimizer can be reconfigured next epoch
+        model, config_train = self.model, self.config_train
+        model_raw           = model.module if hasattr(model, "module") else model
+        optimizer           = model_raw.configure_optimizers(config_train)
+
+        # Train an epoch...
+        model.train()
+        dataset_train = self.dataset_train
+        loader_train = DataLoader( dataset_train, shuffle     = config_train.shuffle, 
+                                                  pin_memory  = config_train.pin_memory, 
+                                                  batch_size  = config_train.batch_size,
+                                                  num_workers = config_train.num_workers )
+        losses_epoch = []
+
+        # Train each batch...
+        batch = tqdm.tqdm(enumerate(loader_train), total = len(loader_train), disable = config_train.tqdm_disable)
+        for idx_batch, entry in batch:
+            # Unpack dataloader entry, where mask is the label...
+            batch_img, batch_mask = entry
+            batch_img  = batch_img.to (self.device)
+            batch_mask = batch_mask.to(self.device)
+
+            timestamp_train = (epoch, idx_batch)
+            batch_mask_predicted, batch_mask_true, loss = self.model.forward(batch_img, batch_mask, timestamp_train)
+
+            optimizer.zero_grad()
+            loss.backward()
+            optimizer.step()
+
+            loss_val = loss.cpu().detach().numpy()
+            losses_epoch.append(loss_val)
+
+            logger.info(f"MSG - epoch {epoch}, batch {idx_batch:d}, loss {loss_val:.8f}")
+
+        loss_epoch_mean = np.mean(losses_epoch)
+        logger.info(f"MSG - epoch {epoch}, loss mean {loss_epoch_mean:.8f}")
+
+        # Save the model state
+        if saves_checkpoint: self.save_checkpoint()
+
+        return loss_epoch_mean if returns_loss else None

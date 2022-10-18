@@ -46,7 +46,7 @@ class LossValidator:
         return None
 
 
-    def validate(self, is_return_loss = False, epoch = None):
+    def validate(self, returns_loss = False, epoch = None):
         """ The testing loop.  """
 
         # Load model and testing configuration...
@@ -84,4 +84,4 @@ class LossValidator:
         loss_epoch_mean = np.mean(losses_epoch)
         logger.info(f"MSG - epoch {epoch}, loss mean {loss_epoch_mean:.8f}")
 
-        return loss_epoch_mean if is_return_loss else None
+        return loss_epoch_mean if returns_loss else None

@@ -32,9 +32,12 @@ class PeakFinderModel(nn.Module):
         self.Sigmoid = nn.Sigmoid()
         self.MSELoss = nn.MSELoss()
 
+        self.timestamp_tuple = None
 
-    def forward(self, batch_img, batch_mask):
+
+    def forward(self, batch_img, batch_mask, timestamp_tuple = ()):
         # Find the predicted mask...
+        self.method.timestamp_tuple = self.timestamp_tuple
         batch_mask_predicted = self.method.forward(batch_img)
 
         # Crop the target mask...

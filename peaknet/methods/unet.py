@@ -162,13 +162,14 @@ class UNet(nn.Module):
         # Final $1 \times 1$ convolution layer to produce the output
         self.final_conv = nn.Conv2d(base_channels, out_channels, kernel_size=1)
 
-        if requires_nn_tracker:
+        self.requires_nn_tracker = requires_nn_tracker
+        if self.requires_nn_tracker:
             self.nn_tracker_dict = {}
             self.forward = self.forward_and_track
 
     def forward(self, x: torch.Tensor):
         """
-        :param x: input image
+        :param x: input image, timestamp.
         """
         # To collect the outputs of contracting path for later concatenation with the expansive path.
         pass_through = []
@@ -196,60 +197,58 @@ class UNet(nn.Module):
         # Final $1 \times 1$ convolution layer
         x = self.final_conv(x)
 
-        #
         return x
 
 
-    def forward_and_track(self, x: torch.Tensor, timestamp_tuple = ()):
+    def forward_and_track(self, x: torch.Tensor, timestamp = None):
         """
         :param x: input image
         """
         # To collect the outputs of contracting path for later concatenation with the expansive path.
         # Timestamp the tracker...
-        self.nn_tracker_dict[timestamp_tuple] = {}
+        self.nn_tracker_dict[timestamp] = {}
 
         pass_through = []
         # Contracting path
         for i in range(len(self.down_conv)):
             # Track downconv...
-            self.nn_tracker_dict[timestamp_tuple][(i, 'prev_down_conv')] = x
+            self.nn_tracker_dict[timestamp][(i, 'prev_down_conv')] = x
             x = self.down_conv[i](x)
-            self.nn_tracker_dict[timestamp_tuple][(i, 'down_conv')] = x
+            self.nn_tracker_dict[timestamp][(i, 'down_conv')] = x
 
             # Collect the output
             pass_through.append(x)
 
             # Down-sample
-            self.nn_tracker_dict[timestamp_tuple][(i, 'prev_down_sample')] = x
+            self.nn_tracker_dict[timestamp][(i, 'prev_down_sample')] = x
             x = self.down_sample[i](x)
-            self.nn_tracker_dict[timestamp_tuple][(i, 'down_sample')] = x
+            self.nn_tracker_dict[timestamp][(i, 'down_sample')] = x
 
         # Two $3 \times 3$ convolutional layers at the bottom of the U-Net
-        self.nn_tracker_dict[timestamp_tuple]['prev_middle_conv'] = x
+        self.nn_tracker_dict[timestamp]['prev_middle_conv'] = x
         x = self.middle_conv(x)
-        self.nn_tracker_dict[timestamp_tuple]['middle_conv'] = x
+        self.nn_tracker_dict[timestamp]['middle_conv'] = x
 
         # Expansive path
         for i in range(len(self.up_conv)):
             # Up-sample
-            self.nn_tracker_dict[timestamp_tuple][(i, 'prev_up_sample')] = x
+            self.nn_tracker_dict[timestamp][(i, 'prev_up_sample')] = x
             x = self.up_sample[i](x)
-            self.nn_tracker_dict[timestamp_tuple][(i, 'up_sample')] = x
+            self.nn_tracker_dict[timestamp][(i, 'up_sample')] = x
 
             # Concatenate the output of the contracting path
-            self.nn_tracker_dict[timestamp_tuple][(i, 'prev_concat')] = x
+            self.nn_tracker_dict[timestamp][(i, 'prev_concat')] = x
             x = self.concat[i](x, pass_through.pop())
-            self.nn_tracker_dict[timestamp_tuple][(i, 'concat')] = x
+            self.nn_tracker_dict[timestamp][(i, 'concat')] = x
 
             # Two $3 \times 3$ convolutional layers
-            self.nn_tracker_dict[timestamp_tuple][(i, 'prev_up_conv')] = x
+            self.nn_tracker_dict[timestamp][(i, 'prev_up_conv')] = x
             x = self.up_conv[i](x)
-            self.nn_tracker_dict[timestamp_tuple][(i, 'up_conv')] = x
+            self.nn_tracker_dict[timestamp][(i, 'up_conv')] = x
 
         # Final $1 \times 1$ convolution layer
-        self.nn_tracker_dict[timestamp_tuple]['prev_final_conv'] = x
+        self.nn_tracker_dict[timestamp]['prev_final_conv'] = x
         x = self.final_conv(x)
-        self.nn_tracker_dict[timestamp_tuple]['final_conv'] = x
+        self.nn_tracker_dict[timestamp]['final_conv'] = x
 
-        #
         return x

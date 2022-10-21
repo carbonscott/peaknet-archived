@@ -42,10 +42,10 @@ class DoubleConvolution(nn.Module):
 
         # First $3 \times 3$ convolutional layer
         self.first = nn.Conv2d(in_channels, out_channels, kernel_size=3, padding=1)
-        self.act1 = nn.ReLU()
+        self.act1 = nn.PReLU()
         # Second $3 \times 3$ convolutional layer
         self.second = nn.Conv2d(out_channels, out_channels, kernel_size=3, padding=1)
-        self.act2 = nn.ReLU()
+        self.act2 = nn.PReLU()
 
     def forward(self, x: torch.Tensor):
         # Apply the two convolution layers and activations

@@ -26,11 +26,6 @@ class PeakFinderModel(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.method     = config.method
-        self.pos_weight = config.pos_weight * torch.ones([1])
-
-        self.BCEWithLogitsLoss = nn.BCEWithLogitsLoss(pos_weight = self.pos_weight)
-        self.Sigmoid = nn.Sigmoid()
-        self.MSELoss = nn.MSELoss()
 
 
     def forward(self, batch_img, batch_mask, timestamp = None):
@@ -43,6 +38,10 @@ class PeakFinderModel(nn.Module):
         batch_mask_true = center_crop(batch_mask, size_y, size_x)
 
         # Calculate BCE loss...
+        num_pos = (batch_mask == 1).sum()
+        num_neg = (batch_mask == 0).sum()
+        pos_weight = num_neg / num_pos
+        self.BCEWithLogitsLoss = nn.BCEWithLogitsLoss(pos_weight = pos_weight)
         loss_bce = self.BCEWithLogitsLoss(batch_mask_predicted, batch_mask_true)
 
         loss = loss_bce

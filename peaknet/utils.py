@@ -25,11 +25,14 @@ def set_seed(seed):
 
 class EpochManager:
 
-    def __init__(self, trainer, validator, max_epochs = 1, saves_feature_map = False):
-        self.trainer    = trainer
-        self.validator  = validator
-        self.max_epochs = max_epochs
+    def __init__(self, trainer, validator, max_epochs        = 1, 
+                                           saves_feature_map = False,
+                                           timestamp         = ""):
+        self.trainer           = trainer
+        self.validator         = validator
+        self.max_epochs        = max_epochs
         self.saves_feature_map = saves_feature_map
+        self.timestamp         = timestamp
 
         return None
 
@@ -53,12 +56,12 @@ class EpochManager:
             # Notice it doesn't imply early stopping
             if loss_validate < loss_min: 
                 # Save a checkpoint file...
-                self.trainer.save_checkpoint()
+                self.trainer.save_checkpoint(self.timestamp)
 
                 # Update the new loss...
                 loss_min = loss_validate
 
-            if self.saves_feature_map: self.trainer.save_feature_map()
+            if self.saves_feature_map: self.trainer.save_feature_map(self.timestamp)
 
         return None
 

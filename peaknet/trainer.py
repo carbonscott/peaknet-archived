@@ -44,7 +44,7 @@ class Trainer:
         return None
 
 
-    def save_checkpoint(self):
+    def save_checkpoint(self, timestamp):
         DRCCHKPT = "chkpts"
         drc_cwd = os.getcwd()
         prefixpath_chkpt = os.path.join(drc_cwd, DRCCHKPT)
@@ -58,7 +58,7 @@ class Trainer:
         torch.save(model.state_dict(), path_chkpt)
 
 
-    def save_feature_map(self):
+    def save_feature_map(self, timestamp):
         DRCFMAP = "feature_maps"
         drc_cwd = os.getcwd()
         prefixpath_fmaps = os.path.join(drc_cwd, DRCFMAP)
@@ -94,8 +94,8 @@ class Trainer:
             batch_img  = batch_img.to (self.device)
             batch_mask = batch_mask.to(self.device)
 
-            timestamp = (epoch, idx_batch)
-            _, _, loss = self.model.forward(batch_img, batch_mask, timestamp)
+            progress_train = (epoch, idx_batch)
+            _, _, loss = self.model.forward(batch_img, batch_mask, progress_train)
 
             optimizer.zero_grad()
             loss.backward()
@@ -108,12 +108,5 @@ class Trainer:
 
         loss_epoch_mean = np.mean(losses_epoch)
         logger.info(f"MSG - epoch {epoch}, loss mean {loss_epoch_mean:.8f}")
-
-        ## # Save the model state
-        ## if self.config_train.saves_checkpoint: 
-        ##     self.save_checkpoint()
-
-        ## if self.config_train.saves_feature_map: 
-        ##     self.save_feature_map()
 
         return loss_epoch_mean if returns_loss else None

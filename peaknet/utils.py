@@ -7,6 +7,7 @@ import torch
 import numpy as np
 import tqdm
 import skimage.measure as sm
+import os
 
 logger = logging.getLogger(__name__)
 
@@ -24,10 +25,11 @@ def set_seed(seed):
 
 class EpochManager:
 
-    def __init__(self, trainer, validator, max_epochs = 1):
+    def __init__(self, trainer, validator, max_epochs = 1, saves_feature_map = False):
         self.trainer    = trainer
         self.validator  = validator
         self.max_epochs = max_epochs
+        self.saves_feature_map = saves_feature_map
 
         return None
 
@@ -39,7 +41,7 @@ class EpochManager:
         # Start trainig and validation...
         for epoch in tqdm.tqdm(range(self.max_epochs)):
             # Run one epoch of training...
-            self.trainer.train(saves_checkpoint = False, epoch = epoch)
+            self.trainer.train(epoch = epoch)
 
             # Pass the model to validator for immediate validation...
             self.validator.model = self.trainer.model
@@ -56,7 +58,37 @@ class EpochManager:
                 # Update the new loss...
                 loss_min = loss_validate
 
+            if self.saves_feature_map: self.trainer.save_feature_map()
+
         return None
+
+
+
+
+def init_logger(returns_timestamp = False):
+    # Create a timestamp to name the log file...
+    now = datetime.now()
+    timestamp = now.strftime("%Y_%m%d_%H%M_%S")
+
+    # Configure the location to run the job...
+    drc_cwd = os.getcwd()
+
+    # Set up the log file...
+    fl_log         = f"{timestamp}.train.log"
+    DRCLOG         = "logs"
+    prefixpath_log = os.path.join(drc_cwd, DRCLOG)
+    if not os.path.exists(prefixpath_log): os.makedirs(prefixpath_log)
+    path_log = os.path.join(prefixpath_log, fl_log)
+
+    # Config logging behaviors
+    logging.basicConfig( filename = path_log,
+                         filemode = 'w',
+                         format="%(asctime)s %(levelname)s %(name)-35s - %(message)s",
+                         datefmt="%m/%d/%Y %H:%M:%S",
+                         level=logging.INFO, )
+    logger = logging.getLogger(__name__)
+
+    return timestamp if returns_timestamp else None
 
 
 

@@ -30,11 +30,10 @@ class ConfigTrainer:
 
 
 class Trainer:
-    def __init__(self, model, dataset_train, config_train, requires_param_tracker = False):
+    def __init__(self, model, dataset_train, config_train):
         self.model         = model
         self.dataset_train = dataset_train
         self.config_train  = config_train
-        self.requires_param_tracker = requires_param_tracker
 
         # Load data to gpus if available
         self.device = 'cpu'
@@ -42,21 +41,36 @@ class Trainer:
             self.device = torch.cuda.current_device()
             self.model  = torch.nn.DataParallel(self.model).to(self.device)
 
-        # Enable param tracker???
-        if self.requires_param_tracker:
-            self.param_tracker_dict = {}
-
         return None
 
 
     def save_checkpoint(self):
+        DRCCHKPT = "chkpts"
+        drc_cwd = os.getcwd()
+        prefixpath_chkpt = os.path.join(drc_cwd, DRCCHKPT)
+        if not os.path.exists(prefixpath_chkpt): os.makedirs(prefixpath_chkpt)
+        fl_chkpt   = f"{timestamp}.train.chkpt"
+        path_chkpt = os.path.join(prefixpath_chkpt, fl_chkpt)
+
         # Hmmm, DataParallel wrappers keep raw model object in .module attribute
         model = self.model.module if hasattr(self.model, "module") else self.model
-        logger.info(f"SAVE - {self.config_train.path_chkpt}")
-        torch.save(model.state_dict(), self.config_train.path_chkpt)
+        logger.info(f"SAVE - {path_chkpt}")
+        torch.save(model.state_dict(), path_chkpt)
 
 
-    def train(self, saves_checkpoint = True, epoch = None, returns_loss = False):
+    def save_feature_map(self):
+        DRCFMAP = "feature_maps"
+        drc_cwd = os.getcwd()
+        prefixpath_fmaps = os.path.join(drc_cwd, DRCFMAP)
+        if not os.path.exists(prefixpath_fmaps): os.makedirs(prefixpath_fmaps)
+        fl_fmap   = f"{timestamp}.train.fmaps.pt"
+        path_fmap = os.path.join(prefixpath_fmaps, fl_fmap)
+
+        logger.info(f"SAVE - {path_fmap}")
+        torch.save(model.method.feature_map_dict, path_fmap)
+
+
+    def train(self, epoch = None, returns_loss = False):
         # Load model and training configuration...
         # Optimizer can be reconfigured next epoch
         model, config_train = self.model, self.config_train
@@ -95,7 +109,11 @@ class Trainer:
         loss_epoch_mean = np.mean(losses_epoch)
         logger.info(f"MSG - epoch {epoch}, loss mean {loss_epoch_mean:.8f}")
 
-        # Save the model state
-        if saves_checkpoint: self.save_checkpoint()
+        ## # Save the model state
+        ## if self.config_train.saves_checkpoint: 
+        ##     self.save_checkpoint()
+
+        ## if self.config_train.saves_feature_map: 
+        ##     self.save_feature_map()
 
         return loss_epoch_mean if returns_loss else None

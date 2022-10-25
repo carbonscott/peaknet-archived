@@ -39,7 +39,7 @@ class Trainer:
         self.device = 'cpu'
         if torch.cuda.is_available():
             self.device = torch.cuda.current_device()
-            self.model  = torch.nn.DataParallel(self.model).to(self.device)
+        self.model  = torch.nn.DataParallel(self.model).to(self.device)
 
         return None
 
@@ -56,18 +56,6 @@ class Trainer:
         model = self.model.module if hasattr(self.model, "module") else self.model
         logger.info(f"SAVE - {path_chkpt}")
         torch.save(model.state_dict(), path_chkpt)
-
-
-    def save_feature_map(self, timestamp):
-        DRCFMAP = "feature_maps"
-        drc_cwd = os.getcwd()
-        prefixpath_fmaps = os.path.join(drc_cwd, DRCFMAP)
-        if not os.path.exists(prefixpath_fmaps): os.makedirs(prefixpath_fmaps)
-        fl_fmap   = f"{timestamp}.train.fmaps.pt"
-        path_fmap = os.path.join(prefixpath_fmaps, fl_fmap)
-
-        logger.info(f"SAVE - {path_fmap}")
-        torch.save(model.method.feature_map_dict, path_fmap)
 
 
     def train(self, epoch = None, returns_loss = False):
@@ -94,8 +82,7 @@ class Trainer:
             batch_img  = batch_img.to (self.device)
             batch_mask = batch_mask.to(self.device)
 
-            progress_train = (epoch, idx_batch)
-            _, _, loss = self.model.forward(batch_img, batch_mask, progress_train)
+            _, _, loss = self.model.forward(batch_img, batch_mask)
 
             optimizer.zero_grad()
             loss.backward()

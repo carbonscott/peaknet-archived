@@ -8,6 +8,7 @@ import numpy as np
 import tqdm
 import skimage.measure as sm
 import os
+from datetime import datetime
 
 logger = logging.getLogger(__name__)
 
@@ -25,24 +26,27 @@ def set_seed(seed):
 
 class EpochManager:
 
-    def __init__(self, trainer, validator, max_epochs        = 1, 
-                                           saves_feature_map = False,
-                                           timestamp         = ""):
+    def __init__(self, trainer, validator, timestamp = "", saves_param_update_ratio = False):
+
         self.trainer           = trainer
         self.validator         = validator
-        self.max_epochs        = max_epochs
-        self.saves_feature_map = saves_feature_map
         self.timestamp         = timestamp
+
+        self.saves_param_update_ratio = saves_param_update_ratio
+        self.param_update_ratio_dict  = {}
+
+        self.activation_dict    = {}
+        self.preactivation_dict = {}
 
         return None
 
 
-    def run(self):
+    def run(self, max_epochs):
         # Track the min of loss from inf...
         loss_min = float('inf')
 
         # Start trainig and validation...
-        for epoch in tqdm.tqdm(range(self.max_epochs)):
+        for epoch in tqdm.tqdm(range(max_epochs)):
             # Run one epoch of training...
             self.trainer.train(epoch = epoch)
 
@@ -61,9 +65,45 @@ class EpochManager:
                 # Update the new loss...
                 loss_min = loss_validate
 
-            if self.saves_feature_map: self.trainer.save_feature_map(self.timestamp)
+            # Saves parameter update history...
+            if self.saves_param_update_ratio: self.save_param_update_ratio()
 
         return None
+
+
+    def save_param_update_ratio(self):
+        with torch.no_grad():
+            for name, param in self.trainer.model.named_parameters():
+                if param.grad is None: continue
+
+                if name not in self.param_update_ratio_dict: self.param_update_ratio_dict[name] = []
+
+                # Calculate update_ratio at each layer...
+                update_ratio = (param.grad.std() / param.std()).item()
+                self.param_update_ratio_dict[name] = update_ratio
+
+
+
+    def build_layer_hook(self, module_name, tag = ''):
+        if tag not in self.preactivation_dict: self.preactivation_dict[tag] = {}
+        if tag not in self.activation_dict   : self.activation_dict   [tag] = {}
+        def hook(model, input, output):
+            self.preactivation_dict[tag][module_name] = input
+            self.activation_dict   [tag][module_name] = output
+        return hook
+
+
+    def set_layer_to_capture(self, module_name_capture_list = [], module_layer_capture_list = []):
+        for module_name, module_layer in self.trainer.model.named_modules():
+            # Capture based on module name...
+            for module_name_capture in module_name_capture_list:
+                if module_name_capture in module_name:
+                    module_layer.register_forward_hook(self.build_layer_hook(module_name, module_name_capture))
+
+            # Capture based on module layer...
+            for module_layer_capture in module_layer_capture_list:
+                if isinstance(module_layer, module_layer_capture):
+                    module_layer.register_forward_hook(self.build_layer_hook(module_name, module_layer_capture))
 
 
 

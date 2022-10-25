@@ -42,10 +42,12 @@ class DoubleConvolution(nn.Module):
 
         # First $3 \times 3$ convolutional layer
         self.first = nn.Conv2d(in_channels, out_channels, kernel_size=3, padding=1)
-        self.act1 = nn.PReLU()
+        self.batch_norm1 = nn.BatchNorm2d(out_channels)
+        self.act1 = nn.ReLU()
         # Second $3 \times 3$ convolutional layer
         self.second = nn.Conv2d(out_channels, out_channels, kernel_size=3, padding=1)
-        self.act2 = nn.PReLU()
+        self.batch_norm2 = nn.BatchNorm2d(out_channels)
+        self.act2 = nn.ReLU()
 
     def forward(self, x: torch.Tensor):
         # Apply the two convolution layers and activations
@@ -112,7 +114,8 @@ class UNet(nn.Module):
     """
     ## U-Net
     """
-    def __init__(self, in_channels: int, out_channels: int, base_channels = 64, num_downsample_layer = None, requires_nn_tracker = False):
+    ## def __init__(self, in_channels: int, out_channels: int, base_channels = 64, num_downsample_layer = None, requires_feature_map = False):
+    def __init__(self, in_channels: int, out_channels: int, base_channels = 64, num_downsample_layer = None):
         """
         :param in_channels: number of channels in the input image
         :param out_channels: number of channels in the result feature map
@@ -162,93 +165,42 @@ class UNet(nn.Module):
         # Final $1 \times 1$ convolution layer to produce the output
         self.final_conv = nn.Conv2d(base_channels, out_channels, kernel_size=1)
 
-        self.requires_nn_tracker = requires_nn_tracker
-        if self.requires_nn_tracker:
-            self.nn_tracker_dict = {}
-            self.forward = self.forward_and_track
+        ## # Always keep the feature_map_dict for exporting purpose
+        ## self.feature_map_dict = {}
+        ## self.requires_feature_map = requires_feature_map
+
+        ## # Switch to forward and track???
+        ## if self.requires_feature_map:
+        ##     self.forward = self.forward_and_track
 
     def forward(self, x: torch.Tensor):
-        """
-        :param x: input image, timestamp.
-        """
-        # To collect the outputs of contracting path for later concatenation with the expansive path.
-        pass_through = []
-        # Contracting path
-        for i in range(len(self.down_conv)):
-            # Two $3 \times 3$ convolutional layers
-            x = self.down_conv[i](x)
-            # Collect the output
-            pass_through.append(x)
-            # Down-sample
-            x = self.down_sample[i](x)
-
-        # Two $3 \times 3$ convolutional layers at the bottom of the U-Net
-        x = self.middle_conv(x)
-
-        # Expansive path
-        for i in range(len(self.up_conv)):
-            # Up-sample
-            x = self.up_sample[i](x)
-            # Concatenate the output of the contracting path
-            x = self.concat[i](x, pass_through.pop())
-            # Two $3 \times 3$ convolutional layers
-            x = self.up_conv[i](x)
-
-        # Final $1 \times 1$ convolution layer
-        x = self.final_conv(x)
-
-        return x
-
-
-    def forward_and_track(self, x: torch.Tensor, timestamp = None):
         """
         :param x: input image
         """
         # To collect the outputs of contracting path for later concatenation with the expansive path.
-        # Timestamp the tracker...
-        self.nn_tracker_dict[timestamp] = {}
-
         pass_through = []
         # Contracting path
         for i in range(len(self.down_conv)):
-            # Track downconv...
-            self.nn_tracker_dict[timestamp][(i, 'prev_down_conv')] = x
+            # Two $3 \times 3$ convolutional layers
             x = self.down_conv[i](x)
-            self.nn_tracker_dict[timestamp][(i, 'down_conv')] = x
-
             # Collect the output
             pass_through.append(x)
-
             # Down-sample
-            self.nn_tracker_dict[timestamp][(i, 'prev_down_sample')] = x
             x = self.down_sample[i](x)
-            self.nn_tracker_dict[timestamp][(i, 'down_sample')] = x
 
         # Two $3 \times 3$ convolutional layers at the bottom of the U-Net
-        self.nn_tracker_dict[timestamp]['prev_middle_conv'] = x
         x = self.middle_conv(x)
-        self.nn_tracker_dict[timestamp]['middle_conv'] = x
 
         # Expansive path
         for i in range(len(self.up_conv)):
             # Up-sample
-            self.nn_tracker_dict[timestamp][(i, 'prev_up_sample')] = x
             x = self.up_sample[i](x)
-            self.nn_tracker_dict[timestamp][(i, 'up_sample')] = x
-
             # Concatenate the output of the contracting path
-            self.nn_tracker_dict[timestamp][(i, 'prev_concat')] = x
             x = self.concat[i](x, pass_through.pop())
-            self.nn_tracker_dict[timestamp][(i, 'concat')] = x
-
             # Two $3 \times 3$ convolutional layers
-            self.nn_tracker_dict[timestamp][(i, 'prev_up_conv')] = x
             x = self.up_conv[i](x)
-            self.nn_tracker_dict[timestamp][(i, 'up_conv')] = x
 
         # Final $1 \times 1$ convolution layer
-        self.nn_tracker_dict[timestamp]['prev_final_conv'] = x
         x = self.final_conv(x)
-        self.nn_tracker_dict[timestamp]['final_conv'] = x
 
         return x

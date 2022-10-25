@@ -4,6 +4,7 @@
 import torch
 import torch.nn as nn
 import logging
+import os
 
 from peaknet.datasets.transform import center_crop
 
@@ -26,27 +27,70 @@ class PeakFinderModel(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.method     = config.method
+        self.pos_weight = config.pos_weight
+        ## self.weight_mse_loss = getattr(config, "weight_mse_loss", 0.0)
+
+        # Convert numerical values into torch tensors...
+        self.pos_weight = torch.tensor(self.pos_weight)
 
 
-    def forward(self, batch_img, batch_mask, timestamp = None):
+    def init_params(self, from_timestamp = None):
+        # Initialize weights or reuse weights from a timestamp...
+        def init_weights(module):
+            # Initialize conv2d with Kaiming method...
+            if isinstance(module, nn.Conv2d):
+                nn.init.kaiming_normal_(module.weight.data, nonlinearity = 'relu')
+
+                # Set bias zero since batch norm is used...
+                module.bias.data.zero_()
+
+        if from_timestamp is None:
+            self.apply(init_weights)
+        else:
+            drc_cwd          = os.getcwd()
+            DRCCHKPT         = "chkpts"
+            prefixpath_chkpt = os.path.join(drc_cwd, DRCCHKPT)
+            fl_chkpt_prev    = f"{from_timestamp}.train.chkpt"
+            path_chkpt_prev  = os.path.join(prefixpath_chkpt, fl_chkpt_prev)
+            self.load_state_dict(torch.load(path_chkpt_prev))
+
+
+    def forward(self, batch_img, batch_mask):
         # Find the predicted mask...
-        batch_mask_predicted = self.method.forward(batch_img, timestamp = timestamp) if self.method.requires_nn_tracker else \
-                               self.method.forward(batch_img)
+        batch_fmap_predicted = self.method.forward(batch_img)
 
         # Crop the target mask...
-        size_y, size_x = batch_mask_predicted.shape[-2:]
+        size_y, size_x = batch_fmap_predicted.shape[-2:]
         batch_mask_true = center_crop(batch_mask, size_y, size_x)
 
-        # Calculate BCE loss...
-        num_pos = (batch_mask == 1).sum()
-        num_neg = (batch_mask == 0).sum()
-        pos_weight = num_neg / num_pos
-        self.BCEWithLogitsLoss = nn.BCEWithLogitsLoss(pos_weight = pos_weight)
-        loss_bce = self.BCEWithLogitsLoss(batch_mask_predicted, batch_mask_true)
+        loss_bce = self.calc_bce_with_logit_loss(batch_fmap_predicted, batch_mask_true)
+        ## loss_mse = self.calc_mse_with_logit_loss(batch_fmap_predicted, batch_mask_true)
 
         loss = loss_bce
 
-        return batch_mask_predicted, batch_mask_true, loss
+        return batch_fmap_predicted, batch_mask_true, loss
+
+
+    def calc_mse_with_logit_loss(self, batch_fmap_predicted, batch_mask_true):
+        MSELoss = nn.MSELoss()
+
+        batch_mask_predicted = batch_fmap_predicted.sigmoid()
+
+        loss = MSELoss(batch_mask_predicted, batch_mask_true)
+
+        return loss
+
+
+    def calc_bce_with_logit_loss(self, batch_fmap_predicted, batch_mask_true):
+        ## # Calculate BCE loss...
+        ## num_pos = (batch_mask_true == 1).sum()
+        ## num_neg = (batch_mask_true == 0).sum()
+        ## pos_weight = num_neg / num_pos
+        BCEWithLogitsLoss = nn.BCEWithLogitsLoss(pos_weight = self.pos_weight)
+        loss = BCEWithLogitsLoss(batch_fmap_predicted, batch_mask_true)
+
+        return loss
+
 
 
     def configure_optimizers(self, config_train):
@@ -55,28 +99,28 @@ class PeakFinderModel(nn.Module):
         return optimizer
 
 
-    def calc_dice_loss(self, batch_mask_predicted, batch_mask_true, smooth = 1.0):
+    def calc_dice_loss(self, batch_fmap_predicted, batch_mask_true, smooth = 1.0):
         # Calculate batch intersection...
-        batch_mask_intersection = batch_mask_predicted * batch_mask_true
+        batch_mask_intersection = batch_fmap_predicted * batch_mask_true
         batch_mask_intersection_val = batch_mask_intersection.sum(dim = (-2, -1))
 
         # Calculate the dice coefficient...
         batch_dice_coeff  = 2.0 * batch_mask_intersection_val
-        batch_dice_coeff /= batch_mask_predicted.sum(dim = (-2, -1)) \
+        batch_dice_coeff /= batch_fmap_predicted.sum(dim = (-2, -1)) \
                           + batch_mask_true.sum(dim = (-2, -1))      \
                           + smooth
 
         return -batch_dice_coeff.mean()
 
 
-    def calc_iou_loss(self, batch_mask_predicted, batch_mask_true, smooth = 1.0):
+    def calc_iou_loss(self, batch_fmap_predicted, batch_mask_true, smooth = 1.0):
         # Calculate batch intersection...
-        batch_mask_intersection = batch_mask_predicted * batch_mask_true
+        batch_mask_intersection = batch_fmap_predicted * batch_mask_true
         batch_mask_intersection_sum = batch_mask_intersection.sum(dim = (-2, -1))
 
         # Calculate the iou score...
         batch_iou  = batch_mask_intersection_sum + 1.0
-        batch_iou /= batch_mask_predicted.sum(dim = (-2, -1)) \
+        batch_iou /= batch_fmap_predicted.sum(dim = (-2, -1)) \
                    + batch_mask_true.sum(dim = (-2, -1))      \
                    - batch_mask_intersection_sum              \
                    + 1.0

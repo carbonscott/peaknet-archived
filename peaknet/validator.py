@@ -34,14 +34,16 @@ class LossValidator:
         self.dataset_test = dataset_test
         self.config_test  = config_test
 
-        # Load data to gpus if available...
+        # Is GPU avaiable???
         self.device = 'cpu'
-        if self.config_test.path_chkpt is not None and torch.cuda.is_available():
+        if torch.cuda.is_available():
             self.device = torch.cuda.current_device()
 
-            chkpt = torch.load(self.config_test.path_chkpt)
+        # Load checkpoint???
+        if self.config_test.path_chkpt is not None:
+            chkpt       = torch.load(self.config_test.path_chkpt)
             self.model.load_state_dict(chkpt)
-            self.model = torch.nn.DataParallel(self.model).to(self.device)
+        self.model = torch.nn.DataParallel(self.model).to(self.device)
 
         return None
 

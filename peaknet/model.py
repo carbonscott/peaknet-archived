@@ -92,7 +92,6 @@ class PeakFinderModel(nn.Module):
         return loss
 
 
-
     def configure_optimizers(self, config_train):
         optimizer = torch.optim.Adam(self.method.parameters(), lr = config_train.lr)
 

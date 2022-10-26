@@ -10,7 +10,6 @@ import h5py
 import pickle
 import logging
 
-from scipy.spatial    import cKDTree
 from torch.utils.data import Dataset
 
 from peaknet.utils                  import set_seed, split_dataset

@@ -26,17 +26,70 @@ def set_seed(seed):
 
 class EpochManager:
 
-    def __init__(self, trainer, validator, timestamp = "", saves_param_update_ratio = False):
+    def __init__(self, trainer, validator, timestamp = ""):
 
         self.trainer           = trainer
         self.validator         = validator
         self.timestamp         = timestamp
 
-        self.saves_param_update_ratio = saves_param_update_ratio
+        # Track model training information
         self.param_update_ratio_dict  = {}
+        self.activation_dict          = {}
+        self.preactivation_dict       = {}
+        self.model_named_parameters   = []
+        self.model_named_gradients    = []
 
-        self.activation_dict    = {}
-        self.preactivation_dict = {}
+        return None
+
+
+    def save_state_dict(self):
+        DRCDEBUG = "debug"
+        drc_cwd = os.getcwd()
+        prefixpath_debug = os.path.join(drc_cwd, DRCDEBUG)
+        if not os.path.exists(prefixpath_debug): os.makedirs(prefixpath_debug)
+        fl_debug   = f"{self.timestamp}.train.debug"
+        path_debug = os.path.join(prefixpath_debug, fl_debug)
+
+        # Hmmm, DataParallel wrappers keep raw model object in .module attribute
+        state_dict = {
+            "param_update"           : self.param_update_ratio_dict,
+            "preactivation"          : self.preactivation_dict,
+            "activation"             : self.activation_dict,
+            "model_named_parameters" : self.model_named_parameters,
+            "model_named_gradients"  : self.model_named_gradients,
+        }
+        torch.save(state_dict, path_debug)
+
+
+    def save_model_parameters(self):
+        self.model_named_parameters = list(self.trainer.model.named_parameters())
+
+
+    def save_model_gradients(self):
+        self.model_named_gradients = [ (name, param.grad) for name, param in self.trainer.model.named_parameters() ]
+
+
+    def run_one_epoch(self, epoch):
+        # Track the min of loss from inf...
+        loss_min = float('inf')
+
+        # Run one epoch of training...
+        self.trainer.train(epoch = epoch)
+
+        # Pass the model to validator for immediate validation...
+        self.validator.model = self.trainer.model
+
+        # Run one epoch of training...
+        loss_validate = self.validator.validate(returns_loss = True, epoch = epoch)
+
+        # Save checkpoint whenever validation loss gets smaller...
+        # Notice it doesn't imply early stopping
+        if loss_validate < loss_min: 
+            # Save a checkpoint file...
+            self.trainer.save_checkpoint(self.timestamp)
+
+            # Update the new loss...
+            loss_min = loss_validate
 
         return None
 
@@ -65,9 +118,6 @@ class EpochManager:
                 # Update the new loss...
                 loss_min = loss_validate
 
-            # Saves parameter update history...
-            if self.saves_param_update_ratio: self.save_param_update_ratio()
-
         return None
 
 
@@ -81,7 +131,6 @@ class EpochManager:
                 # Calculate update_ratio at each layer...
                 update_ratio = (param.grad.std() / param.std()).item()
                 self.param_update_ratio_dict[name] = update_ratio
-
 
 
     def build_layer_hook(self, module_name, tag = ''):

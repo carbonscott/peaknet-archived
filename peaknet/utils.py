@@ -331,22 +331,27 @@ def calc_dmat(emb1_list, emb2_list, is_sqrt = True):
 
 
 
-def split_dataset(dataset, fracA):
+def split_dataset(dataset_list, fracA):
     ''' Split a dataset into two subsets A and B by user-specified fraction.
     '''
+    # Indexing elements in the dataset...
+    size_dataset = len(dataset_list)
+    idx_dataset = range(size_dataset)
+
     # Get the size of the dataset and the subset A...
-    size_dataset = len(dataset)
     size_fracA   = int(fracA * size_dataset)
 
     # Randomly choosing examples for constructing subset A...
-    fracA_list = random.sample(dataset, size_fracA)
+    idx_fracA_list = random.sample(idx_dataset, size_fracA)
 
     # Obtain the subset B...
-    fracB_list = set(dataset) - set(fracA_list)
-    fracB_list = sorted(list(fracB_list))
+    idx_fracB_list = set(idx_dataset) - set(idx_fracA_list)
+    idx_fracB_list = sorted(list(idx_fracB_list))
+
+    fracA_list = [ dataset_list[idx] for idx in idx_fracA_list ]
+    fracB_list = [ dataset_list[idx] for idx in idx_fracB_list ]
 
     return fracA_list, fracB_list
-
 
 
 

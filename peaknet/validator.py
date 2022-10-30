@@ -71,8 +71,8 @@ class LossValidator:
 
             ## batch_img, batch_mask, batch_metadata = entry
             batch_img, batch_mask = entry
-            batch_img  = batch_img.to (self.device)
-            batch_mask = batch_mask.to(self.device)
+            batch_img  = batch_img.to (self.device, dtype=torch.float)
+            batch_mask = batch_mask.to(self.device, dtype=torch.float)
 
             with torch.no_grad():
                 _, _, loss = self.model.forward(batch_img, batch_mask)

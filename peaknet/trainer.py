@@ -79,8 +79,8 @@ class Trainer:
         for idx_batch, entry in batch:
             # Unpack dataloader entry, where mask is the label...
             batch_img, batch_mask = entry
-            batch_img  = batch_img.to (self.device)
-            batch_mask = batch_mask.to(self.device)
+            batch_img  = batch_img.to (self.device, dtype=torch.float)
+            batch_mask = batch_mask.to(self.device, dtype=torch.float)
 
             _, _, loss = self.model.forward(batch_img, batch_mask)
 

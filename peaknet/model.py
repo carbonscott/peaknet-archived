@@ -71,7 +71,7 @@ class PeakFinderModel(nn.Module):
 
         ## loss = loss_bce
 
-        loss_focal = self.calc_focal_loss(batch_fmap_predicted, batch_mask_true, alpha = self.focal_alpha, gamma = self.focal_gamma)
+        loss_focal = self.calc_binary_focal_loss_with_logits(batch_fmap_predicted, batch_mask_true, alpha = self.focal_alpha, gamma = self.focal_gamma)
         loss = loss_focal
 
         return batch_fmap_predicted, batch_mask_true, loss
@@ -133,19 +133,52 @@ class PeakFinderModel(nn.Module):
         return -batch_iou.mean()
 
 
+    def calc_binary_focal_loss_with_logits(self, x, y, alpha = 0.8, gamma = 2.0):
+        '''
+        Formula 5 from
+        Lin, Tsung-Yi, Priya Goyal, Ross Girshick, Kaiming He, and Piotr
+        Dollár. “Focal Loss for Dense Object Detection.” arXiv, February 7,
+        2018. http://arxiv.org/abs/1708.02002.
 
+        Also, the logit calculation that doesn't explode in gradients.
 
-    def calc_focal_loss(self, inputs, targets, alpha = 0.8, gamma = 2.0, smooth=1):
-        # Convert to probability using sigmoid...
-        inputs = inputs.sigmoid()
+        Firstly, logit = -log(1 / (1-exp(-x)))
+                       = log(1 + exp(-x))
 
-        # Compute the focal loss...
-        # Formula 5 from
-        # Lin, Tsung-Yi, Priya Goyal, Ross Girshick, Kaiming He, and Piotr
-        # Dollár. “Focal Loss for Dense Object Detection.” arXiv, February 7,
-        # 2018. http://arxiv.org/abs/1708.02002.
-        logit = nn.functional.binary_cross_entropy(inputs, targets, reduction='mean')
-        prob  = torch.exp(-logit)
-        focal_loss = alpha * (1-prob)**gamma * logit
+        Then,
+        ~~~math1
+        simplify:
+        log(1 + exp(-x)) = log(exp(0) + exp(-x))
 
-        return focal_loss.mean()
+        trick: 
+        log(exp(x1) + exp(x2)) = a + log(exp(x1-a) + exp(x2-a)), where a = max(x1, x2)
+
+        so:
+        log(exp(0) + exp(-x)) = log(exp(x1) + exp(x2)), where x1 = 0 and x2 = -x
+        = a + log(exp(0-a) + exp(-x-a))
+
+        conclusion:
+        log(1 + exp(-x)) = a + log(exp(0-a) + exp(-x-a))
+        ~~~
+
+        Finally,
+        logit = a + log( exp(-a) + exp(-x-a) ), where a = max(0, -x)
+
+        Calculate focal loss,
+        binary_focal_loss = alpha * y * (1 - p)**gamma * logit +
+                            (1 - y) * p**gamma * x             +
+                            p**gamma * (1 - y) * logit
+        '''
+        # Calculate logit in a numerically stable way (see the docstring)...
+        a = (-x).clamp(min = 0)
+        logit = a + ( (-a).exp() + (-x-a).exp() ).log()
+
+        # Derive probability based on logits...
+        p = (-logit).exp()
+
+        # Calculate the binary focal loss...
+        binary_focal_loss = alpha * y * (1 - p)**gamma * logit + \
+                            (1 - y) * p**gamma * x             + \
+                            p**gamma * (1 - y) * logit
+
+        return binary_focal_loss.mean()

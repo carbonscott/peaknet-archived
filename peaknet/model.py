@@ -30,6 +30,9 @@ class PeakFinderModel(nn.Module):
         self.pos_weight = config.pos_weight
         ## self.weight_mse_loss = getattr(config, "weight_mse_loss", 0.0)
 
+        self.focal_alpha = config.focal_alpha
+        self.focal_gamma = config.focal_gamma
+
         # Convert numerical values into torch tensors...
         self.pos_weight = torch.tensor(self.pos_weight)
 
@@ -63,10 +66,13 @@ class PeakFinderModel(nn.Module):
         size_y, size_x = batch_fmap_predicted.shape[-2:]
         batch_mask_true = center_crop(batch_mask, size_y, size_x)
 
-        loss_bce = self.calc_bce_with_logit_loss(batch_fmap_predicted, batch_mask_true)
+        ## loss_bce = self.calc_bce_with_logit_loss(batch_fmap_predicted, batch_mask_true)
         ## loss_mse = self.calc_mse_with_logit_loss(batch_fmap_predicted, batch_mask_true)
 
-        loss = loss_bce
+        ## loss = loss_bce
+
+        loss_focal = self.calc_focal_loss(batch_fmap_predicted, batch_mask_true, alpha = self.focal_alpha, gamma = self.focal_gamma)
+        loss = loss_focal
 
         return batch_fmap_predicted, batch_mask_true, loss
 
@@ -130,18 +136,16 @@ class PeakFinderModel(nn.Module):
 
 
     def calc_focal_loss(self, inputs, targets, alpha = 0.8, gamma = 2.0, smooth=1):
-        #comment out if your model contains a sigmoid or equivalent activation layer
-        inputs = nn.Sigmoid()(inputs)
+        # Convert to probability using sigmoid...
+        inputs = inputs.sigmoid()
 
-        #flatten label and prediction tensors
-        ## inputs = inputs.view(-1)
-        ## targets = targets.view(-1)
-        inputs  = torch.flatten(inputs , start_dim = -2)
-        targets = torch.flatten(targets, start_dim = -2)
-
-        #first compute binary cross-entropy 
-        BCE = nn.functional.binary_cross_entropy(inputs, targets, reduction='mean')
-        BCE_EXP = torch.exp(-BCE)
-        focal_loss = alpha * (1-BCE_EXP)**gamma * BCE
+        # Compute the focal loss...
+        # Formula 5 from
+        # Lin, Tsung-Yi, Priya Goyal, Ross Girshick, Kaiming He, and Piotr
+        # Dollár. “Focal Loss for Dense Object Detection.” arXiv, February 7,
+        # 2018. http://arxiv.org/abs/1708.02002.
+        logit = nn.functional.binary_cross_entropy(inputs, targets, reduction='mean')
+        prob  = torch.exp(-logit)
+        focal_loss = alpha * (1-prob)**gamma * logit
 
         return focal_loss.mean()

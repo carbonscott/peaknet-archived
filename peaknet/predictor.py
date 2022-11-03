@@ -46,7 +46,7 @@ class CheetahPeakFinder:
         return batch_center_of_mass
 
 
-    def find_peak(self, img_stack, threshold_prob = 1 - 1e-4):
+    def find_peak(self, img_stack, threshold_prob = 1 - 1e-4, min_num_peaks = 15):
         peak_list = []
 
         # Normalize the image stack...
@@ -68,23 +68,25 @@ class CheetahPeakFinder:
         num_stack, _, size_y, size_x = mask_stack_predicted.shape
         peak_pos_predicted_stack = self.calc_batch_center_of_mass(mask_stack_predicted.view(num_stack, size_y, size_x))
 
-        # Convert to cheetah coordinates...
-        for idx_panel, y, x in peak_pos_predicted_stack:
-            if cp.isnan(y) or cp.isnan(x): continue
+        # A workaround to avoid copying gpu memory to cpu when num of peaks is small...
+        if len(peak_pos_predicted_stack) >= min_num_peaks:
+            # Convert to cheetah coordinates...
+            for idx_panel, y, x in peak_pos_predicted_stack:
+                if cp.isnan(y) or cp.isnan(x): continue
 
-            idx_panel = int(idx_panel)
+                idx_panel = int(idx_panel.get())
 
-            # For some reason, it's faster to do it on cpu
-            x = x.get()
-            y = y.get()
+                # For some reason, it's faster to do it on cpu
+                x = x.get()
+                y = y.get()
 
-            y, x = coord_crop_to_img((y, x), img_stack.shape[-2:], mask_stack_predicted.shape[-2:])
+                y, x = coord_crop_to_img((y, x), img_stack.shape[-2:], mask_stack_predicted.shape[-2:])
 
-            x_min, y_min, x_max, y_max = self.cheetah_geom_list[idx_panel]
+                x_min, y_min, x_max, y_max = self.cheetah_geom_list[idx_panel]
 
-            x += x_min
-            y += y_min
+                x += x_min
+                y += y_min
 
-            peak_list.append((y, x))
+                peak_list.append((y, x))
 
         return peak_list

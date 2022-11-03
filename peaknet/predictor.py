@@ -37,9 +37,9 @@ class CheetahPeakFinder:
         # 2D image________________|
 
         # Define structure in 2D image at the middle layer
-        structure[1] = cp.array([[0,1,0],
+        structure[1] = cp.array([[1,1,1],
                                  [1,1,1],
-                                 [0,1,0]])
+                                 [1,1,1]])
 
         # Fetch labels...
         batch_label, batch_num_feature = ndimage.label(batch_mask, structure = structure)

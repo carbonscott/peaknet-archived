@@ -5,6 +5,7 @@ import torch
 import pickle
 import cupy as cp
 
+from math import isnan
 from cupyx.scipy import ndimage
 
 from peaknet.datasets.transform import coord_crop_to_img
@@ -71,14 +72,12 @@ class CheetahPeakFinder:
         # A workaround to avoid copying gpu memory to cpu when num of peaks is small...
         if len(peak_pos_predicted_stack) >= min_num_peaks:
             # Convert to cheetah coordinates...
-            for idx_panel, y, x in peak_pos_predicted_stack:
-                if cp.isnan(y) or cp.isnan(x): continue
+            for peak_pos in peak_pos_predicted_stack:
+                idx_panel, y, x = peak_pos.get()
 
-                idx_panel = int(idx_panel.get())
+                if isnan(y) or isnan(x): continue
 
-                # For some reason, it's faster to do it on cpu
-                x = x.get()
-                y = y.get()
+                idx_panel = int(idx_panel)
 
                 y, x = coord_crop_to_img((y, x), img_stack.shape[-2:], mask_stack_predicted.shape[-2:])
 

@@ -1,12 +1,8 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
-import os
 import torch
 import pickle
-import numpy as np
-import h5py
-import time
 import cupy as cp
 
 from cupyx.scipy import ndimage

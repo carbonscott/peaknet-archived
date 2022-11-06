@@ -26,7 +26,8 @@ seed = 0
 # Set up experiments...
 exp           = 'cxic0415'
 run           = 101
-img_load_mode = 'calib'
+## img_load_mode = 'calib'
+img_load_mode = 'raw'
 access_mode   = 'idx'
 detector_name = 'CxiDs1.0:Cspad.0'
 photon_energy = 12688.890590380644    # eV
@@ -35,7 +36,8 @@ psana_img = PsanaImg(exp, run, access_mode, detector_name)
 
 
 # Load trained model...
-timestamp = "2022_1101_2326_41"    # Manual
+## timestamp = "2022_1101_2326_41"    # Manual
+timestamp = "2022_1103_1444_47"    # Raw
 base_channels = 8
 pos_weight    = 1.0
 focal_alpha   = 0.8
@@ -61,14 +63,15 @@ pf = CheetahPeakFinder(model = model, path_cheetah_geom = path_cheetah_geom)
 # Finding...
 min_num_peaks       = 20
 event_start         = 0
-event_end           = len(psana_img.timestamps)
+## event_end           = len(psana_img.timestamps)
+event_end           = 5000
 multipanel_mask     = psana_img.create_bad_pixel_mask()
 event_filtered_list = []
 for event in range(event_start, event_end):
     print(f"Processing {event:06d} : ", end = '')
     # print(f"Processing {event:06d} : ")
 
-    multipanel_img        = psana_img.get(event, None, 'calib')
+    multipanel_img        = psana_img.get(event, None, img_load_mode)
     multipanel_img_masked = multipanel_mask * multipanel_img
 
     img_stack = torch.tensor(multipanel_img_masked).type(dtype=torch.float)[:,None].to(device)
@@ -85,8 +88,7 @@ for event in range(event_start, event_end):
 
 
 drc_pf = 'demo'
-fl_event_filtered_list = f"pf.{timestamp}.{event_start:06d}-{event_end:06d}.peaks.pickle"
+fl_event_filtered_list = f"pf.{timestamp}.{event_start:06d}-{event_end:06d}.peaks.raw.pickle"
 path_event_filtered_list = os.path.join(drc_pf, fl_event_filtered_list)
 with open(path_event_filtered_list, 'wb') as fh:
     pickle.dump(event_filtered_list, fh, protocol = pickle.HIGHEST_PROTOCOL)
-

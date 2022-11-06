@@ -3,7 +3,6 @@
 
 import numpy as np
 import torch
-import random
 import os
 import logging
 
@@ -43,10 +42,6 @@ class SFXDataset(Dataset):
         self.dataset_list = dataset_list
         self.trans        = trans
         self.seed         = seed
-
-        # Set the seed...
-        # Debatable whether seed should be set in the dataset or in the running code
-        if not self.seed is None: set_seed(self.seed)
 
         return None
 

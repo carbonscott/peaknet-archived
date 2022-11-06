@@ -20,7 +20,8 @@ timestamp_prev = None
 
 # Set up parameters for an experiment...
 drc_dataset   = 'datasets'
-fl_dataset    = 'sfx.0002.npy'
+## fl_dataset    = 'sfx.0003.npy'
+fl_dataset    = 'sfx.0000.raw.npy'    # Raw, just give it a try
 path_dataset  = os.path.join(drc_dataset, fl_dataset)
 
 frac_train    = 0.6
@@ -28,12 +29,12 @@ frac_validate = 0.5
 dataset_usage = 'train'
 
 base_channels = 8
-pos_weight    = 1.0
-focal_alpha   = 0.8
+pos_weight    = 1.0    # [IMPROVE] Remove it.
+focal_alpha   = 1.2
 focal_gamma   = 2.0
 
 size_batch = 10
-lr         = 3*1e-4
+lr         = 5*1e-5
 seed       = 0
 
 # Clarify the purpose of this experiment...
@@ -66,8 +67,8 @@ metalog.report()
 # [[[ DATASET ]]]
 # Load raw data...
 dataset_list = np.load(path_dataset)
-data_train   , data_val_and_test = split_dataset(dataset_list     , frac_train   )
-data_validate, data_test         = split_dataset(data_val_and_test, frac_validate)
+data_train   , data_val_and_test = split_dataset(dataset_list     , frac_train   , seed = seed)
+data_validate, data_test         = split_dataset(data_val_and_test, frac_validate, seed = seed)
 
 # Define the training set
 dataset_train = SFXDataset( dataset_list = data_train,
@@ -118,7 +119,7 @@ validator = LossValidator(model, dataset_validate, config_validator)
 
 
 # [[[ EPOCH MANAGER ]]]
-max_epochs = 500
+max_epochs = 1000
 epoch_manager = EpochManager( trainer   = trainer,
                               validator = validator,
                               timestamp = timestamp, )
@@ -135,5 +136,4 @@ for epoch in tqdm.tqdm(range(max_epochs)):
     if epoch % freq_save == 0: 
         epoch_manager.save_model_parameters()
         epoch_manager.save_model_gradients()
-
         epoch_manager.save_state_dict()

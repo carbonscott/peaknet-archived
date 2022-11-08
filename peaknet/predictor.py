@@ -126,11 +126,11 @@ class CheetahPeakFinder:
         time_start = time.time()
         # Thresholding the probability...
         is_background = mask_stack_predicted < threshold_prob
-        mask_zero = torch.zeros(is_background.shape, dtype = torch.int8, device = torch.cuda.current_device() if torch.cuda.is_available() else 'cpu')
-        mask_one  = torch.ones (is_background.shape, dtype = torch.int8, device = torch.cuda.current_device() if torch.cuda.is_available() else 'cpu')
-        mask_stack_predicted = torch.where(is_background, mask_zero, mask_one)
-        ## mask_stack_predicted[ is_background ] = 0
-        ## mask_stack_predicted[~is_background ] = 1
+        mask_stack_predicted[ is_background ] = 0
+        mask_stack_predicted[~is_background ] = 1
+        ## mask_zero = torch.zeros(is_background.shape, dtype = torch.int8, device = torch.cuda.current_device() if torch.cuda.is_available() else 'cpu')
+        ## mask_one  = torch.ones (is_background.shape, dtype = torch.int8, device = torch.cuda.current_device() if torch.cuda.is_available() else 'cpu')
+        ## mask_stack_predicted = torch.where(is_background, mask_zero, mask_one)
         time_end = time.time()
         time_delta = time_end - time_start
         time_delta_name = 'pf:Thresholding'

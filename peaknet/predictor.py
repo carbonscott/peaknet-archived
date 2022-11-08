@@ -62,8 +62,9 @@ class CheetahPeakFinder:
         mask_stack_predicted = fmap_stack.sigmoid()
 
         # Thresholding the probability...
-        mask_stack_predicted[  mask_stack_predicted < threshold_prob ] = 0
-        mask_stack_predicted[~(mask_stack_predicted < threshold_prob)] = 1
+        is_background = mask_stack_predicted < threshold_prob
+        mask_stack_predicted[ is_background ] = 0
+        mask_stack_predicted[~is_background ] = 1
 
         # Find center of mass for each image in the stack...
         num_stack, _, size_y, size_x = mask_stack_predicted.shape
@@ -124,8 +125,12 @@ class CheetahPeakFinder:
 
         time_start = time.time()
         # Thresholding the probability...
-        mask_stack_predicted[  mask_stack_predicted < threshold_prob ] = 0
-        mask_stack_predicted[~(mask_stack_predicted < threshold_prob)] = 1
+        is_background = mask_stack_predicted < threshold_prob
+        mask_zero = torch.zeros(is_background.shape, dtype = torch.int8, device = torch.cuda.current_device() if torch.cuda.is_available() else 'cpu')
+        mask_one  = torch.ones (is_background.shape, dtype = torch.int8, device = torch.cuda.current_device() if torch.cuda.is_available() else 'cpu')
+        mask_stack_predicted = torch.where(is_background, mask_zero, mask_one)
+        ## mask_stack_predicted[ is_background ] = 0
+        ## mask_stack_predicted[~is_background ] = 1
         time_end = time.time()
         time_delta = time_end - time_start
         time_delta_name = 'pf:Thresholding'

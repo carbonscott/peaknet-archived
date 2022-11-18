@@ -454,7 +454,13 @@ class SFXPanelDataset(Dataset):
         cache_key = (fl_stream, fl_cxi, event_crystfel)
         if not cache_key in self.raw_img_cache_dict:
             with h5py.File(fl_cxi, 'r') as fh:
-                raw_img = fh["/entry_1/instrument_1/detector_1/data"][event_crystfel]
+                # Fetch raw image and mask...
+                ## raw_img = fh["/entry_1/instrument_1/detector_1/data"][event_crystfel]
+                raw_img = fh["/entry_1/data_1/data"][event_crystfel]
+                mask    = fh["/entry_1/data_1/mask"][()]
+
+                # Apply mask to image...
+                raw_img *= np.where(mask > 0, 0, 1)
 
                 if self.add_channel_ok: raw_img = raw_img[None,]
 

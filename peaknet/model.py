@@ -27,14 +27,14 @@ class PeakFinderModel(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.method     = config.method
-        self.pos_weight = config.pos_weight
+        ## self.pos_weight = config.pos_weight
         ## self.weight_mse_loss = getattr(config, "weight_mse_loss", 0.0)
 
         self.focal_alpha = config.focal_alpha
         self.focal_gamma = config.focal_gamma
 
-        # Convert numerical values into torch tensors...
-        self.pos_weight = torch.tensor(self.pos_weight)
+        ## # Convert numerical values into torch tensors...
+        ## self.pos_weight = torch.tensor(self.pos_weight)
 
 
     def init_params(self, from_timestamp = None):

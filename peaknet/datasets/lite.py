@@ -43,6 +43,9 @@ class SFXDataset(Dataset):
         self.trans        = trans
         self.seed         = seed
 
+        if self.seed is not None:
+            set_seed(seed)
+
         return None
 
 

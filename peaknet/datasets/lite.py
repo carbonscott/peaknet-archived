@@ -2,13 +2,11 @@
 # -*- coding: utf-8 -*-
 
 import numpy as np
-import torch
-import os
 import logging
 
 from torch.utils.data import Dataset
 
-from peaknet.utils                  import set_seed, split_dataset
+from peaknet.utils import set_seed
 
 logger = logging.getLogger(__name__)
 

@@ -3,7 +3,7 @@
 
 import torch
 
-def center_crop(img, size_y_crop, size_x_crop, returns_offset = False):
+def center_crop(img, size_y_crop, size_x_crop, returns_offset_tuple = False):
     '''
     Return the cropped area and associated offset for coordinate transformation
     purposes.  
@@ -46,7 +46,7 @@ def center_crop(img, size_y_crop, size_x_crop, returns_offset = False):
 
     # Pack things to return in a tuple
     ret_tuple = img_crop
-    if returns_offset:
+    if returns_offset_tuple:
         # Min float for finding the offset
         y_min_crop_float = (size_y_super - size_y_crop) / 2
         x_min_crop_float = (size_x_super - size_x_crop) / 2

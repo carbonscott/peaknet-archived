@@ -56,6 +56,7 @@ class SFXPanelDataset(Dataset):
         self.mpi_comm       = getattr(config, 'mpi_comm'      , None)
         self.add_channel_ok = getattr(config, 'add_channel_ok', True)
         self.mask_radius    = getattr(config, 'mask_radius'   , 3)
+        self.is_batch_mask  = getattr(config, 'is_batch_mask' , False)
         self.snr_threshold  = getattr(config, 'snr_threshold' , 0.3)
         self.adu_threshold  = getattr(config, 'adu_threshold' , 1000)
 
@@ -457,7 +458,7 @@ class SFXPanelDataset(Dataset):
                 # Fetch raw image and mask...
                 ## raw_img = fh["/entry_1/instrument_1/detector_1/data"][event_crystfel]
                 raw_img = fh["/entry_1/data_1/data"][event_crystfel]
-                mask    = fh["/entry_1/data_1/mask"][()]
+                mask    = fh["/entry_1/data_1/mask"][event_crystfel if self.is_batch_mask else ()]
 
                 # Apply mask to image...
                 raw_img *= np.where(mask > 0, 0, 1)

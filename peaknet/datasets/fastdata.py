@@ -10,6 +10,7 @@ import h5py
 import pickle
 import logging
 
+from scipy            import ndimage
 from torch.utils.data import Dataset
 
 from peaknet.utils                  import set_seed, split_dataset
@@ -58,6 +59,7 @@ class SFXPanelDataset(Dataset):
         self.mask_radius    = getattr(config, 'mask_radius'   , 3)
         self.is_batch_mask  = getattr(config, 'is_batch_mask' , False)
         self.snr_threshold  = getattr(config, 'snr_threshold' , 0.3)
+        self.uses_indexed   = getattr(config, 'uses_indexed'  , False)
         self.adu_threshold  = getattr(config, 'adu_threshold' , 1000)
 
         # Variables that capture raw information from the input (stream files)
@@ -327,13 +329,21 @@ class SFXPanelDataset(Dataset):
         return metadata_list, peak_list
 
 
-    def calc_peak_SNR(self, img_peak, inner_box_radius_offset = 1):
+    def calc_peak_SNR(self, img_peak, radius_inner_box = 2):
         size_y, size_x = img_peak.shape[-2:]
 
-        y_min_inner_box = 0      + inner_box_radius_offset
-        x_min_inner_box = 0      + inner_box_radius_offset
-        y_max_inner_box = size_y - inner_box_radius_offset
-        x_max_inner_box = size_x - inner_box_radius_offset
+        cy = size_y // 2
+        cx = size_x // 2
+
+        x_min_inner_box = max(cx - radius_inner_box-1, 0)
+        x_max_inner_box = min(cx + radius_inner_box, size_x)
+        y_min_inner_box = max(cy - radius_inner_box-1, 0)
+        y_max_inner_box = min(cy + radius_inner_box, size_y)
+
+        ## y_min_inner_box = 0      + inner_box_radius_offset
+        ## x_min_inner_box = 0      + inner_box_radius_offset
+        ## y_max_inner_box = size_y - inner_box_radius_offset
+        ## x_max_inner_box = size_x - inner_box_radius_offset
 
         select_matrix = np.zeros((size_y, size_x), dtype = bool)
 
@@ -354,6 +364,34 @@ class SFXPanelDataset(Dataset):
 
         # Calculate signal noise ratio...
         snr = mean_img_signal / mean_img_bg
+
+        return snr
+
+
+    def calc_peak_SNR_with_mask(self, img_peak, mask_peak):
+        # Choose signal pixel and bg pixel...
+        img_sg = img_peak[ mask_peak]
+        img_bg = img_peak[~mask_peak]
+
+        ## img_sg *= img_sg
+        ## img_bg *= img_bg
+
+        ## img_sg = img_sg.sum() / img_sg.size
+        ## img_bg = img_bg.sum() / img_bg.size
+
+        ## snr = 10 * np.log10(img_sg / img_bg)
+
+        ## # Calculate the mean bg...
+        ## mean_img_bg = np.mean(img_bg)
+
+        ## # Background subtraction...
+        ## img_sg -= mean_img_bg
+        ## mean_img_sg = np.mean(img_sg)
+
+        ## # Calculate signal noise ratio...
+        ## snr = mean_img_sg / mean_img_bg
+
+        snr = img_sg.mean() / img_bg.mean()
 
         return snr
 
@@ -485,7 +523,12 @@ class SFXPanelDataset(Dataset):
         # Cutoff threshold using min ADU...
         adu_threshold = self.adu_threshold
 
+        # Set up structure to find connected component in 2D only...
+        structure = np.ones((3, 3, 3))
+
         for peak_type, peak_list in peak_per_panel_list.items():
+            if peak_type == 'indexed' and (not self.uses_indexed): continue
+
             for peak in peak_list:
                 # Unack coordiante...
                 x, y = peak
@@ -503,24 +546,41 @@ class SFXPanelDataset(Dataset):
                 y = y - y_min
 
                 # Find a patch around a peak with global image coordinate...
-                patch_x_min = max(x - mask_radius, 0)
+                patch_x_min = max(x - mask_radius-1, 0)
                 patch_x_max = min(x + mask_radius, size_x)
-                patch_y_min = max(y - mask_radius, 0)
+                patch_y_min = max(y - mask_radius-1, 0)
                 patch_y_max = min(y + mask_radius, size_y)
                 patch_img = panel_img[..., patch_y_min : patch_y_max, patch_x_min : patch_x_max]
 
-                # Calculate the SNR of the patch...
-                snr = self.calc_peak_SNR(patch_img)
-                if snr < snr_threshold: continue
+                ## # Calculate the SNR of the patch...
+                ## snr = self.calc_peak_SNR(patch_img)
+                ## if snr < snr_threshold: continue
 
                 ## # Figure out the local threshold...
-                ## std_level  = 1
-                ## patch_mean = np.mean(patch_img)
-                ## patch_std  = np.std (patch_img)
-                ## threshold  = patch_mean + std_level * patch_std
+                std_level = 1
+                patch_mean = np.mean(patch_img)
+                patch_std  = np.std (patch_img)
+                threshold  = patch_mean + std_level * patch_std
+
+                # [OVER-ENGINEERING WARNING] Find the most interesting area...
+                mask_peak = patch_img >= threshold
+                label_peak, num_peak = ndimage.label(mask_peak, structure = structure)
+
+                # Modify label if necessary...
+                if num_peak > 1:
+                    # [DETAIL] i+1 is the label
+                    label_human_engineered, _ = sorted([ (i+1, (label_peak == i+1).sum()) for i in range(num_peak) ], key = lambda x:x[1], reverse = True)[0]
+                    label_peak[label_peak != label_human_engineered] = 0
+
+                mask_peak = label_peak > 0
+
+                # Calculate the SNR of the patch...
+                snr = self.calc_peak_SNR_with_mask(patch_img, mask_peak)
+                if snr < snr_threshold: continue
 
                 # Mask the patch area out...
-                panel_label[..., patch_y_min : patch_y_max, patch_x_min : patch_x_max][~(patch_img < adu_threshold)] += 1
+                ## panel_label[..., patch_y_min : patch_y_max, patch_x_min : patch_x_max][~(patch_img < adu_threshold)] += 1
+                panel_label[..., patch_y_min : patch_y_max, patch_x_min : patch_x_max][mask_peak] += 1
 
         # Assure that it is a binary mask...
         panel_label[panel_label != 0] = 1

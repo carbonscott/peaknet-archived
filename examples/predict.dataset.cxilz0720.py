@@ -20,30 +20,28 @@ from peaknet.model              import ConfigPeakFinderModel, PeakFinderModel
 
 
 # Set up experiments...
-exp           = 'cxic0415'
-run           = 101
+exp           = 'cxilz0720'
+run           = 156
 img_load_mode = 'calib'
-## img_load_mode = 'raw'
 access_mode   = 'idx'
-detector_name = 'CxiDs1.0:Cspad.0'
-photon_energy = 12688.890590380644    # eV
-encoder_value = -450.0034
-psana_img = PsanaImg(exp, run, access_mode, detector_name)
+detector_name = 'CxiDs1.0:Jungfrau.0'
+psana_img     = PsanaImg(exp, run, access_mode, detector_name)
 
 
 # Load trained model...
-timestamp = "2022_1101_2326_41"    # Manual
+timestamp = "2023_0320_2245_44"
+epoch = 218
+fl_chkpt = None if timestamp is None else f"{timestamp}.epoch_{epoch}.chkpt"
+
 base_channels = 8
-pos_weight    = 1.0
-focal_alpha   = 0.8
+focal_alpha   = 1.2
 focal_gamma   = 2.0
 method = UNet( in_channels = 1, out_channels = 1, base_channels = base_channels )
 config_peakfinder = ConfigPeakFinderModel( method = method, 
-                                           pos_weight = pos_weight, 
                                            focal_alpha = focal_alpha,
                                            focal_gamma = focal_gamma)
 model = PeakFinderModel(config_peakfinder)
-model.init_params(from_timestamp = timestamp)   # Run this will load a trained model
+model.init_params(fl_chkpt = fl_chkpt)   # Run this will load a trained model
 
 # Load model to gpus if available...
 device = torch.cuda.current_device() if torch.cuda.is_available() else 'cpu'
@@ -69,8 +67,6 @@ for event in range(event_start, event_end):
     multipanel_img_masked = multipanel_mask * multipanel_img
 
     img_stack = torch.tensor(multipanel_img_masked).type(dtype=torch.float)[:,None].to(device)
-
-    # Normalization is done in find_peak below
 
     time_start = time.time()
     peak_list = pf.find_peak(img_stack, threshold_prob = 1 - 1e-4, min_num_peaks = min_num_peaks)

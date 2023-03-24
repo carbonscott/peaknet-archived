@@ -22,6 +22,19 @@ class CheetahPeakFinder:
             cheetah_geom_dict = pickle.load(handle)
         self.cheetah_geom_list = list(cheetah_geom_dict.values())[::2]
 
+        # Set up structure to find connected component in 2D only...
+        self.structure = cp.zeros((3, 3, 3))
+        #                     ^  ^^^^
+        # batch_______________|   |
+        #                         |
+        # 2D image________________|
+
+        # Define structure in 2D image at the middle layer
+        self.structure[1] = cp.array([[1,1,1],
+                                      [1,1,1],
+                                      [1,1,1]])
+
+
 
     def calc_batch_center_of_mass(self, batch_mask):
         batch_mask = cp.asarray(batch_mask)
@@ -52,17 +65,19 @@ class CheetahPeakFinder:
 
         batch_mask = cp.asarray(batch_mask)
 
-        # Set up structure to find connected component in 2D only...
-        structure = cp.zeros((3, 3, 3))
-        #                     ^  ^^^^
-        # batch_______________|   |
-        #                         |
-        # 2D image________________|
 
-        # Define structure in 2D image at the middle layer
-        structure[1] = cp.array([[1,1,1],
-                                 [1,1,1],
-                                 [1,1,1]])
+        # Set up structure to find connected component in 2D only...
+        structure = self.structure
+        ## structure = cp.zeros((3, 3, 3))
+        ## #                     ^  ^^^^
+        ## # batch_______________|   |
+        ## #                         |
+        ## # 2D image________________|
+
+        ## # Define structure in 2D image at the middle layer
+        ## structure[1] = cp.array([[1,1,1],
+        ##                          [1,1,1],
+        ##                          [1,1,1]])
 
         # Fetch labels...
         time_start = time.time()
@@ -75,6 +90,47 @@ class CheetahPeakFinder:
         # Calculate batch center of mass...
         time_start = time.time()
         batch_center_of_mass = ndimage.center_of_mass(batch_mask, batch_label, cp.asarray(range(1, batch_num_feature+1)))
+        time_end = time.time()
+        time_delta = time_end - time_start
+        time_delta_name = 'pf:Center of mass(C)'
+        print(f"Time delta ({time_delta_name:20s}): {time_delta * 1e3:.4f} ms.")
+
+        return batch_center_of_mass
+
+
+    def calc_batch_center_of_mass_2d_perf(self, batch_mask):
+        import time
+
+        batch_mask = cp.asarray(batch_mask)
+
+        # Define structure in 2D image at the middle layer
+        structure = cp.array([[1,1,1],
+                              [1,1,1],
+                              [1,1,1]])
+
+        # Fetch labels...
+        time_start = time.time()
+        batch_label = []
+        batch_num_feature = []
+        for batch_idx in range(len(batch_mask)):
+            label, num_feature = ndimage.label(batch_mask[batch_idx], structure = structure)
+
+            batch_label.append(label)
+            batch_num_feature.append(num_feature)
+        time_end = time.time()
+        time_delta = time_end - time_start
+        time_delta_name = 'pf:Center of mass(L)'
+        print(f"Time delta ({time_delta_name:20s}): {time_delta * 1e3:.4f} ms.")
+
+        # Calculate batch center of mass...
+        time_start = time.time()
+        batch_center_of_mass = []
+        for batch_idx in range(len(batch_mask)):
+            mask = batch_mask[batch_idx]
+            label = batch_label[batch_idx]
+            num_feature = batch_num_feature[batch_idx]
+            center_of_mass = ndimage.center_of_mass(mask, label, cp.asarray(range(1, num_feature+1)))
+            batch_center_of_mass.append([batch_idx, *center_of_mass])
         time_end = time.time()
         time_delta = time_end - time_start
         time_delta_name = 'pf:Center of mass(C)'
@@ -111,7 +167,7 @@ class CheetahPeakFinder:
         peak_list = []
 
         # Normalize the image stack...
-        img_stack = (img_stack - img_stack.mean(axis = (2, 3), keepdim = True)) / img_stack.std(axis = (2, 3), keepdim = True)
+        img_stack = (img_stack - img_stack.mean(axis = (-1, -2), keepdim = True)) / img_stack.std(axis = (-1, -2), keepdim = True)
 
         # Get activation feature map given the image stack...
         self.model.eval()
@@ -153,6 +209,30 @@ class CheetahPeakFinder:
         return peak_list
 
 
+    def save_peak_and_fmap(self, img_stack, threshold_prob = 1 - 1e-4):
+        peak_list = []
+
+        # Normalize the image stack...
+        img_stack = (img_stack - img_stack.mean(axis = (2, 3), keepdim = True)) / img_stack.std(axis = (2, 3), keepdim = True)
+
+        # Get activation feature map given the image stack...
+        self.model.eval()
+        with torch.no_grad():
+            fmap_stack = self.model.forward(img_stack)
+
+        # Convert to probability with the sigmoid function...
+        mask_stack_predicted = fmap_stack.sigmoid()
+
+        # Thresholding the probability...
+        mask_stack_predicted = (mask_stack_predicted >= threshold_prob).type(torch.int32)
+
+        # Find center of mass for each image in the stack...
+        num_stack, _, size_y, size_x = mask_stack_predicted.shape
+        peak_pos_predicted_stack = self.calc_batch_center_of_mass(mask_stack_predicted.view(num_stack, size_y, size_x))
+
+        return peak_pos_predicted_stack, mask_stack_predicted
+
+
     def find_peak_and_perf(self, img_stack, threshold_prob = 1 - 1e-4, min_num_peaks = 15):
         import time
 
@@ -186,12 +266,7 @@ class CheetahPeakFinder:
 
         time_start = time.time()
         # Thresholding the probability...
-        ## is_background = mask_stack_predicted < threshold_prob
-        ## mask_stack_predicted[ is_background ] = 0
-        ## mask_stack_predicted[~is_background ] = 1
-
         mask_stack_predicted = (mask_stack_predicted >= threshold_prob).type(torch.int32)
-
         time_end = time.time()
         time_delta = time_end - time_start
         time_delta_name = 'pf:Thresholding'
@@ -202,36 +277,133 @@ class CheetahPeakFinder:
         num_stack, _, size_y, size_x = mask_stack_predicted.shape
         ## peak_pos_predicted_stack = self.calc_batch_center_of_mass(mask_stack_predicted.view(num_stack, size_y, size_x))
         peak_pos_predicted_stack = self.calc_batch_center_of_mass_perf(mask_stack_predicted.view(num_stack, size_y, size_x))
+        ## peak_pos_predicted_stack = self.calc_batch_center_of_mass_2d_perf(mask_stack_predicted.view(num_stack, size_y, size_x))
         ## peak_pos_predicted_stack = self.calc_batch_mean_position(mask_stack_predicted.view(num_stack, size_y, size_x))
         time_end = time.time()
         time_delta = time_end - time_start
         time_delta_name = 'pf:Center of mass'
         print(f"Time delta ({time_delta_name:20s}): {time_delta * 1e3:.4f} ms.")
 
-        # A workaround to avoid copying gpu memory to cpu when num of peaks is small...
-        if len(peak_pos_predicted_stack) >= min_num_peaks:
-            time_start = time.time()
-            # Convert to cheetah coordinates...
-            for peak_pos in peak_pos_predicted_stack:
-                idx_panel, y, x = peak_pos.get()
+        ## # A workaround to avoid copying gpu memory to cpu when num of peaks is small...
+        ## if len(peak_pos_predicted_stack) >= min_num_peaks:
+        ##     time_start = time.time()
+        ##     # Convert to cheetah coordinates...
+        ##     for peak_pos in peak_pos_predicted_stack:
+        ##         idx_panel, y, x = peak_pos.get()
 
-                if isnan(y) or isnan(x): continue
+        ##         if isnan(y) or isnan(x): continue
 
-                idx_panel = int(idx_panel)
+        ##         idx_panel = int(idx_panel)
 
-                y, x = coord_crop_to_img((y, x), img_stack.shape[-2:], mask_stack_predicted.shape[-2:])
+        ##         y, x = coord_crop_to_img((y, x), img_stack.shape[-2:], mask_stack_predicted.shape[-2:])
 
-                x_min, y_min, x_max, y_max = self.cheetah_geom_list[idx_panel]
+        ##         x_min, y_min, x_max, y_max = self.cheetah_geom_list[idx_panel]
 
-                x += x_min
-                y += y_min
+        ##         x += x_min
+        ##         y += y_min
 
-                peak_list.append((y, x))
+        ##         peak_list.append((y, x))
 
-            time_end = time.time()
-            time_delta = time_end - time_start
-            time_delta_name = 'pf:Convert coords'
-            print(f"Time delta ({time_delta_name:20s}): {time_delta * 1e3:.4f} ms.")
+        ##     time_end = time.time()
+        ##     time_delta = time_end - time_start
+        ##     time_delta_name = 'pf:Convert coords'
+        ##     print(f"Time delta ({time_delta_name:20s}): {time_delta * 1e3:.4f} ms.")
+
+        return peak_list
+
+
+    def find_peak_and_perf_downsized(self, img_stack, threshold_prob = 1 - 1e-4, min_num_peaks = 15):
+        import time
+
+        peak_list = []
+
+        time_start = time.time()
+        # Normalize the image stack...
+        img_stack = (img_stack - img_stack.mean(axis = (2, 3), keepdim = True)) / img_stack.std(axis = (2, 3), keepdim = True)
+        time_end = time.time()
+        time_delta = time_end - time_start
+        time_delta_name = 'pf:Normalization'
+        print(f"Time delta ({time_delta_name:20s}): {time_delta * 1e3:.4f} ms.")
+
+        time_start = time.time()
+        # Get activation feature map given the image stack...
+        self.model.eval()
+        with torch.no_grad():
+            fmap_stack = self.model.forward(img_stack)
+        time_end = time.time()
+        time_delta = time_end - time_start
+        time_delta_name = 'pf:Inference'
+        print(f"Time delta ({time_delta_name:20s}): {time_delta * 1e3:.4f} ms.")
+
+        time_start = time.time()
+        # Convert to probability with the sigmoid function...
+        mask_stack_predicted = fmap_stack.sigmoid()
+        time_end = time.time()
+        time_delta = time_end - time_start
+        time_delta_name = 'pf:Sigmoid'
+        print(f"Time delta ({time_delta_name:20s}): {time_delta * 1e3:.4f} ms.")
+
+        time_start = time.time()
+        # Thresholding the probability...
+        mask_stack_predicted = (mask_stack_predicted >= threshold_prob).type(torch.int32)
+        size_y, size_x = mask_stack_predicted.shape[-2:]
+        time_end = time.time()
+        time_delta = time_end - time_start
+        time_delta_name = 'pf:Thresholding'
+        print(f"Time delta ({time_delta_name:20s}): {time_delta * 1e3:.4f} ms.")
+
+        time_start = time.time()
+        mask_stack_predicted_downsized = torch.nn.functional.avg_pool2d(mask_stack_predicted.type(torch.float), kernel_size = 3, stride = 2, padding=1)
+        ## mask_stack_predicted_downsized = torch.nn.functional.avg_pool2d(mask_stack_predicted_downsized.type(torch.float), kernel_size = 3, stride = 2, padding=1)
+        mask_stack_predicted_downsized = (mask_stack_predicted_downsized > 0).type(torch.int32)
+        time_end = time.time()
+        time_delta = time_end - time_start
+        time_delta_name = 'pf:Downsize'
+        print(f"Time delta ({time_delta_name:20s}): {time_delta * 1e3:.4f} ms.")
+
+        time_start = time.time()
+        # Find center of mass for each image in the stack...
+        num_stack, _, size_y_downsized, size_x_downsized = mask_stack_predicted_downsized.shape
+        ## peak_pos_predicted_stack = self.calc_batch_center_of_mass_perf(mask_stack_predicted.view(num_stack, size_y, size_x))
+        peak_pos_predicted_stack = self.calc_batch_center_of_mass_perf(mask_stack_predicted_downsized.view(num_stack, size_y_downsized, size_x_downsized))
+        time_end = time.time()
+        time_delta = time_end - time_start
+        time_delta_name = 'pf:Center of mass'
+        print(f"Time delta ({time_delta_name:20s}): {time_delta * 1e3:.4f} ms.")
+
+        ## time_start = time.time()
+        ## # Find center of mass for each image in the stack...
+        ## peak_pos_predicted_stack[:,1] *= size_y / size_y_downsized
+        ## peak_pos_predicted_stack[:,2] *= size_x / size_x_downsized
+        ## time_end = time.time()
+        ## time_delta = time_end - time_start
+        ## time_delta_name = 'pf:Rescale coordinates'
+        ## print(f"Time delta ({time_delta_name:20s}): {time_delta * 1e3:.4f} ms.")
+
+        ## # A workaround to avoid copying gpu memory to cpu when num of peaks is small...
+        ## if len(peak_pos_predicted_stack) >= min_num_peaks:
+        ##     time_start = time.time()
+        ##     # Convert to cheetah coordinates...
+        ##     for peak_pos in peak_pos_predicted_stack:
+        ##         idx_panel, y, x = peak_pos.get()
+
+        ##         if isnan(y) or isnan(x): continue
+
+        ##         idx_panel = int(idx_panel)
+
+        ##         y, x = coord_crop_to_img((y, x), img_stack.shape[-2:], mask_stack_predicted.shape[-2:])
+
+        ##         x_min, y_min, x_max, y_max = self.cheetah_geom_list[idx_panel]
+
+        ##         x += x_min
+        ##         y += y_min
+
+        ##         peak_list.append((y, x))
+
+        ##     time_end = time.time()
+        ##     time_delta = time_end - time_start
+        ##     time_delta_name = 'pf:Convert coords'
+        ##     print(f"Time delta ({time_delta_name:20s}): {time_delta * 1e3:.4f} ms.")
 
         return peak_list
 

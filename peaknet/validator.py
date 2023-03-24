@@ -29,10 +29,10 @@ class ConfigValidator:
 
 
 class LossValidator:
-    def __init__(self, model, dataset_test, config_test):
+    def __init__(self, model, dataset_test, config):
         self.model        = model
         self.dataset_test = dataset_test
-        self.config_test  = config_test
+        self.config  = config
 
         # Is GPU avaiable???
         self.device = 'cpu'
@@ -40,32 +40,32 @@ class LossValidator:
             self.device = torch.cuda.current_device()
 
         # Load checkpoint???
-        if self.config_test.path_chkpt is not None:
-            chkpt       = torch.load(self.config_test.path_chkpt)
+        if self.config.path_chkpt is not None:
+            chkpt       = torch.load(self.config.path_chkpt)
             self.model.load_state_dict(chkpt)
         self.model = torch.nn.DataParallel(self.model).to(self.device)
 
         return None
 
 
-    def validate(self, returns_loss = False, epoch = None):
+    def validate(self, epoch = None, returns_loss = False, logs_batch_loss = False):
         """ The testing loop.  """
 
         # Load model and testing configuration...
-        model, config_test = self.model, self.config_test
+        model, config = self.model, self.config
 
         # Validate an epoch...
         # Load model state...
         model.eval()
         dataset_test = self.dataset_test
-        loader_test  = DataLoader( dataset_test, shuffle     = config_test.shuffle, 
-                                                 pin_memory  = config_test.pin_memory, 
-                                                 batch_size  = config_test.batch_size,
-                                                 num_workers = config_test.num_workers )
+        loader_test  = DataLoader( dataset_test, shuffle     = config.shuffle, 
+                                                 pin_memory  = config.pin_memory, 
+                                                 batch_size  = config.batch_size,
+                                                 num_workers = config.num_workers )
 
         # Train each batch...
         losses_epoch = []
-        batch = tqdm.tqdm(enumerate(loader_test), total = len(loader_test), disable = config_test.tqdm_disable)
+        batch = tqdm.tqdm(enumerate(loader_test), total = len(loader_test), disable = config.tqdm_disable)
         for step_id, entry in batch:
             losses_batch = []
 
@@ -80,8 +80,10 @@ class LossValidator:
                 losses_batch.append(loss_val)
 
             loss_batch_mean = np.mean(losses_batch)
-            logger.info(f"MSG - epoch {epoch}, batch {step_id:d}, loss {loss_batch_mean:.8f}")
             losses_epoch.append(loss_batch_mean)
+
+            if logs_batch_loss:
+                logger.info(f"MSG - epoch {epoch}, batch {step_id:d}, loss {loss_batch_mean:.8f}")
 
         loss_epoch_mean = np.mean(losses_epoch)
         logger.info(f"MSG - epoch {epoch}, loss mean {loss_epoch_mean:.8f}")

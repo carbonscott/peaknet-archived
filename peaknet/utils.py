@@ -26,11 +26,10 @@ def set_seed(seed):
 
 class EpochManager:
 
-    def __init__(self, trainer, validator, timestamp = ""):
+    def __init__(self, trainer, validator):
 
-        self.trainer           = trainer
-        self.validator         = validator
-        self.timestamp         = timestamp
+        self.trainer   = trainer
+        self.validator = validator
 
         # Track model training information
         self.param_update_ratio_dict  = {}
@@ -39,15 +38,20 @@ class EpochManager:
         self.model_named_parameters   = []
         self.model_named_gradients    = []
 
+        # Track state variable
+        self.loss_min = float('inf')
+
         return None
 
 
     def save_state_dict(self):
+        timestamp = self.trainer.config.timestamp
+
         DRCDEBUG = "debug"
         drc_cwd = os.getcwd()
         prefixpath_debug = os.path.join(drc_cwd, DRCDEBUG)
         if not os.path.exists(prefixpath_debug): os.makedirs(prefixpath_debug)
-        fl_debug   = f"{self.timestamp}.train.debug"
+        fl_debug   = f"{timestamp}.train.debug"
         path_debug = os.path.join(prefixpath_debug, fl_debug)
 
         # Hmmm, DataParallel wrappers keep raw model object in .module attribute
@@ -69,29 +73,26 @@ class EpochManager:
         self.model_named_gradients = [ (name, param.grad) for name, param in self.trainer.model.named_parameters() ]
 
 
-    def run_one_epoch(self, epoch):
-        # Track the min of loss from inf...
-        loss_min = float('inf')
-
+    def run_one_epoch(self, epoch, returns_loss = False, logs_batch_loss = False):
         # Run one epoch of training...
-        self.trainer.train(epoch = epoch)
+        loss_train = self.trainer.train(epoch = epoch, returns_loss = True, logs_batch_loss = logs_batch_loss)
 
         # Pass the model to validator for immediate validation...
         self.validator.model = self.trainer.model
 
         # Run one epoch of training...
-        loss_validate = self.validator.validate(returns_loss = True, epoch = epoch)
+        loss_validate = self.validator.validate(returns_loss = True, epoch = epoch, logs_batch_loss = logs_batch_loss)
 
         # Save checkpoint whenever validation loss gets smaller...
         # Notice it doesn't imply early stopping
-        if loss_validate < loss_min: 
+        if loss_validate < self.loss_min:
             # Save a checkpoint file...
-            self.trainer.save_checkpoint(self.timestamp)
+            self.trainer.save_checkpoint(epoch = epoch)
 
             # Update the new loss...
-            loss_min = loss_validate
+            self.loss_min = loss_validate
 
-        return None
+        return loss_train, loss_validate, self.loss_min if returns_loss else None
 
 
     def run(self, max_epochs):

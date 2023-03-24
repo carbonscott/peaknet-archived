@@ -36,8 +36,9 @@ class SFXDataset(Dataset):
     extract_ method returns object by files.
     """
 
-    def __init__(self, dataset_list, trans = None, seed = None):
+    def __init__(self, dataset_list, trans = None, uses_norm = True, seed = None):
         self.dataset_list = dataset_list
+        self.uses_norm    = uses_norm
         self.trans        = trans
         self.seed         = seed
 
@@ -61,9 +62,17 @@ class SFXDataset(Dataset):
         if self.trans is not None:
             img = self.trans(img)
 
-        # Normalize input image...
-        img_mean = np.mean(img)
-        img_std  = np.std(img)
-        img      = (img - img_mean) / img_std
+        if self.uses_norm:
+            # Normalize input image...
+            img_mean = np.nanmean(img)
+            img_std  = np.nanstd(img)
+            img      = img - img_mean
+
+            if img_std == 0:
+                img_std  = 1.0
+                label[:] = 0
+
+            img /= img_std
+
 
         return img, label

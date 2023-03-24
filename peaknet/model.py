@@ -141,7 +141,7 @@ class PeakFinderModel(nn.Module):
 
         Also, the logit calculation that doesn't explode in gradients.
 
-        Firstly, logit = -log(1 / (1-exp(-x)))
+        Firstly, logit = -log(1 / (1+exp(-x)))
                        = log(1 + exp(-x))
 
         Then,

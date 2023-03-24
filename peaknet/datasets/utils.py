@@ -74,3 +74,16 @@ class PsanaImg:
                                                    unbond      = True,
                                                    unbondnbrs  = True,
                                                    unbondnbrs8 = False).astype(np.uint16)
+
+
+
+
+
+def remove_outliers(data, percentile = 5):
+    """Removes outliers from a numpy array using the IQR method."""
+    q1, q3 = np.percentile(data, [percentile, 100 - percentile])
+    iqr = q3 - q1
+    lower_bound = q1 - 1.5 * iqr
+    upper_bound = q3 + 1.5 * iqr
+    mask = np.logical_and(data >= lower_bound, data <= upper_bound)
+    return data * mask

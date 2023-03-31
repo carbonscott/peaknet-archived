@@ -58,6 +58,7 @@ class SFXPanelDataset(Dataset):
         self.add_channel_ok = getattr(config, 'add_channel_ok', True)
         self.mask_radius    = getattr(config, 'mask_radius'   , 3)
         self.is_batch_mask  = getattr(config, 'is_batch_mask' , False)
+        self.user_mask      = getattr(config, 'user_mask'     , None)
         self.snr_threshold  = getattr(config, 'snr_threshold' , 0.3)
         self.uses_indexed   = getattr(config, 'uses_indexed'  , False)
         self.adu_threshold  = getattr(config, 'adu_threshold' , 1000)
@@ -497,6 +498,13 @@ class SFXPanelDataset(Dataset):
                 ## raw_img = fh["/entry_1/instrument_1/detector_1/data"][event_crystfel]
                 raw_img = fh["/entry_1/data_1/data"][event_crystfel]
                 mask    = fh["/entry_1/data_1/mask"][event_crystfel if self.is_batch_mask else ()]
+
+                # Subtract user mask from the global mask...
+                # mask in psana definition:
+                # - 1 or True means bad pixel
+                # - 0 or False means good pixel
+                if self.user_mask is not None:
+                    mask[mask == self.user_mask] = 0
 
                 # Apply mask to image...
                 raw_img *= np.where(mask > 0, 0, 1)

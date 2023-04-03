@@ -84,6 +84,7 @@ class SFXDataset(Dataset):
 class SFXMulticlassDataset(Dataset):
     def __init__(self, data_list, size_sample, trans_list         = None,
                                                normalizes_data    = False,
+                                               reverse_bg         = False,
                                                prints_cache_state = False,
                                                uses_frac_center   = False,
                                                mpi_comm           = None,):
@@ -93,6 +94,7 @@ class SFXMulticlassDataset(Dataset):
         self.size_sample        = size_sample
         self.trans_list         = trans_list
         self.normalizes_data    = normalizes_data
+        self.reverse_bg         = reverse_bg
         self.prints_cache_state = prints_cache_state
         self.uses_frac_center   = uses_frac_center
         self.mpi_comm           = mpi_comm
@@ -139,6 +141,9 @@ class SFXMulticlassDataset(Dataset):
 
         img   = batch_data[0]
         label = batch_data[1:]
+
+        if self.reverse_bg:
+            label[-1] = 1 - label[-1]
 
         if normalizes_data:
             # Normalize input image...

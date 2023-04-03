@@ -65,15 +65,10 @@ class PeakFinderModel(nn.Module):
         size_y, size_x = batch_fmap_predicted.shape[-2:]
         batch_mask_true = center_crop(batch_mask, size_y, size_x)
 
-        ## loss_bce = self.calc_bce_with_logit_loss(batch_fmap_predicted, batch_mask_true)
-        ## loss_mse = self.calc_mse_with_logit_loss(batch_fmap_predicted, batch_mask_true)
-
-        ## loss = loss_bce
-
         loss_focal = self.calc_binary_focal_loss_with_logits(batch_fmap_predicted, batch_mask_true, alpha = self.focal_alpha, gamma = self.focal_gamma)
         loss = loss_focal
 
-        return batch_fmap_predicted, batch_mask_true, loss
+        return batch_fmap_predicted, batch_mask_true, loss.mean()
 
 
     def calc_mse_with_logit_loss(self, batch_fmap_predicted, batch_mask_true):
@@ -180,4 +175,4 @@ class PeakFinderModel(nn.Module):
                             (1 - y) * p**gamma * x             + \
                             p**gamma * (1 - y) * logit
 
-        return binary_focal_loss.mean()
+        return binary_focal_loss

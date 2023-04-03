@@ -239,7 +239,9 @@ class RandomRotate:
 
         angle = np.random.uniform(low = 0, high = angle_max)
 
-        img_rot = rotate(img, angle = angle, axes = (-2, -1), reshape = False)    # Scikit image wants (x, y) instead of (y, x)
+        order = 0 if img.dtype == 'bool' else 1
+
+        img_rot = rotate(img, angle = angle, order = order, axes = (-2, -1), reshape = False)    # Scikit image wants (x, y) instead of (y, x)
 
         return img_rot
 

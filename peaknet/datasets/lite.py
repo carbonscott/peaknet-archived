@@ -139,8 +139,8 @@ class SFXMulticlassDataset(Dataset):
             for trans in trans_list:
                 batch_data = trans(batch_data)
 
-        img   = batch_data[0]
-        label = batch_data[1:]
+        img   = batch_data[0:1]
+        label = batch_data[1: ]
 
         if self.reverse_bg:
             label[-1] = 1 - label[-1]
@@ -165,7 +165,7 @@ class SFXMulticlassDataset(Dataset):
                      if idx in self.dataset_cache_dict \
                      else self.get_data(idx)
 
-        return img[None,], label[None,]
+        return img, label
 
 
     def cache_dataset(self, idx_list = []):

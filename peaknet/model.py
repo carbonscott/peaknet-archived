@@ -3,6 +3,7 @@
 
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 import logging
 import os
 
@@ -32,6 +33,8 @@ class PeakFinderModel(nn.Module):
 
         self.focal_alpha = config.focal_alpha
         self.focal_gamma = config.focal_gamma
+
+        self.lam = getattr(config, "lam", None)
 
         ## # Convert numerical values into torch tensors...
         ## self.pos_weight = torch.tensor(self.pos_weight)
@@ -65,10 +68,42 @@ class PeakFinderModel(nn.Module):
         size_y, size_x = batch_fmap_predicted.shape[-2:]
         batch_mask_true = center_crop(batch_mask, size_y, size_x)
 
-        loss_focal = self.calc_binary_focal_loss_with_logits(batch_fmap_predicted, batch_mask_true, alpha = self.focal_alpha, gamma = self.focal_gamma)
-        loss = loss_focal
+        loss = self.categorical_loss(batch_fmap_predicted, batch_mask_true)
+        ## loss = self.loss_with_focal(batch_fmap_predicted, batch_mask_true)
+        ## loss = self.loss_with_mask_overlay(batch_fmap_predicted, batch_mask_true)
 
         return batch_fmap_predicted, batch_mask_true, loss.mean()
+
+
+    def categorical_loss(self, batch_fmap_predicted, batch_mask_true):
+        # Interpret multi-channel (multi-class) through softmax...
+        batch_fmap_predicted = F.softmax(batch_fmap_predicted, dim = 1)    # B, C, H, W
+
+        # Convert integer encoded mask into one-hot...
+        batch_mask_true_onehot = self.create_one_hot(batch_mask_true)
+        loss = self.calc_categorical_focal_loss(batch_fmap_predicted, batch_mask_true_onehot)
+
+        return loss
+
+
+    def loss_with_focal(self, batch_fmap_predicted, batch_mask_true):
+        loss = self.calc_binary_focal_loss_with_logits(batch_fmap_predicted, batch_mask_true, alpha = self.focal_alpha, gamma = self.focal_gamma)
+
+        return loss
+
+
+    def loss_with_mask_overlay(self, batch_fmap_predicted, batch_mask_true):
+        loss_focal1 = self.calc_binary_focal_loss_with_logits(batch_fmap_predicted, batch_mask_true, alpha = self.focal_alpha, gamma = self.focal_gamma)
+
+        # [COMMENT] It might be slow to learn
+        batch_peak_filtered = batch_fmap_predicted[0] * (1 - batch_fmap_predicted[1])
+        loss_focal2 = self.calc_binary_focal_loss_with_logits(batch_peak_filtered, batch_mask_true[0], alpha = self.focal_alpha, gamma = self.focal_gamma)
+
+        logger.info(f"DATA - focal loss: {loss_focal1.mean().cpu():.6f} : {loss_focal2.mean().cpu():.6f}")
+
+        loss = loss_focal1 + self.lam * loss_focal2
+
+        return loss
 
 
     def calc_mse_with_logit_loss(self, batch_fmap_predicted, batch_mask_true):
@@ -176,3 +211,28 @@ class PeakFinderModel(nn.Module):
                             p**gamma * (1 - y) * logit
 
         return binary_focal_loss
+
+
+    def calc_categorical_focal_loss(self, y_pred, y):
+        '''
+        y_pred should be one-hot like.  y should use integer encoding.
+        '''
+        alpha = self.focal_alpha
+        gamma = self.focal_gamma
+
+        y_pred = y_pred.clamp(min=1e-8, max=1-1e-8)
+
+        cross_entropy = -y * y_pred.log()
+        loss = alpha * (1 - y_pred)**gamma * cross_entropy
+        loss = loss.sum(dim = 1)    # sum across the class (one-hot) dimension
+
+        return loss
+
+
+    def create_one_hot(self, batch_mask_true):
+        '''
+        B, C, H, W
+        '''
+        B, C, H, W = batch_mask_true.shape
+
+        return F.one_hot(batch_mask_true.to(torch.long).reshape(B, -1)).permute(0, 2, 1).reshape(B, -1, H, W)

@@ -229,18 +229,17 @@ class RandomShift:
 
 
 class RandomRotate:
-    def __init__(self, angle_max = 360): 
+    def __init__(self, angle_max = 360, order = 1):
         self.angle_max = angle_max
+        self.order     = order
 
         return None
 
     def __call__(self, img):
         angle_max = self.angle_max
+        order     = self.order
 
         angle = np.random.uniform(low = 0, high = angle_max)
-
-        order = 0 if img.dtype == 'bool' else 1
-
         img_rot = rotate(img, angle = angle, order = order, axes = (-2, -1), reshape = False)    # Scikit image wants (x, y) instead of (y, x)
 
         return img_rot

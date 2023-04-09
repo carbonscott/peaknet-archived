@@ -33,12 +33,13 @@ class DoubleConvolution(nn.Module):
     but we use $1$ padding so that final feature map is not cropped.
     """
 
-    def __init__(self, in_channels: int, out_channels: int):
+    def __init__(self, in_channels, out_channels, uses_skip_connection = False):
         """
         :param in_channels: is the number of input channels
         :param out_channels: is the number of output channels
         """
         super().__init__()
+        self.uses_skip_connection = uses_skip_connection
 
         # First $3 \times 3$ convolutional layer
         self.first = nn.Conv2d(in_channels, out_channels, kernel_size=3, padding=1)
@@ -49,12 +50,26 @@ class DoubleConvolution(nn.Module):
         self.batch_norm2 = nn.BatchNorm2d(out_channels)
         self.act2 = nn.ReLU()
 
+        if uses_skip_connection:
+            self.res = nn.Sequential(
+                nn.Conv2d(in_channels, out_channels, kernel_size = 1, stride = 1, padding = 0),
+                nn.BatchNorm2d(out_channels),
+            )
+
+
     def forward(self, x: torch.Tensor):
         # Apply the two convolution layers and activations
-        x = self.first(x)
-        x = self.act1(x)
-        x = self.second(x)
-        return self.act2(x)
+        out = self.first(x)
+        out = self.act1(out)
+        out = self.second(out)
+        out = self.act2(out)
+
+        if self.uses_skip_connection:
+            out += self.res(x)
+
+        return out
+
+
 
 
 class DownSample(nn.Module):
@@ -115,12 +130,14 @@ class UNet(nn.Module):
     ## U-Net
     """
     ## def __init__(self, in_channels: int, out_channels: int, base_channels = 64, num_downsample_layer = None, requires_feature_map = False):
-    def __init__(self, in_channels: int, out_channels: int, base_channels = 64, num_downsample_layer = None):
+    def __init__(self, in_channels: int, out_channels: int, base_channels = 64, num_downsample_layer = None, uses_skip_connection = False):
         """
         :param in_channels: number of channels in the input image
         :param out_channels: number of channels in the result feature map
         """
         super().__init__()
+
+        self.uses_skip_connection = uses_skip_connection
 
 
         # Double convolution layers for the contracting path.
@@ -133,14 +150,14 @@ class UNet(nn.Module):
         if isinstance(num_downsample_layer, int):
             num_downsample_layer = max(1, num_downsample_layer)
             num_downsample_layer = min(len(downsample_layer_list), num_downsample_layer)
-        self.down_conv = nn.ModuleList([DoubleConvolution(i, o) for i, o in
+        self.down_conv = nn.ModuleList([DoubleConvolution(i, o, uses_skip_connection = self.uses_skip_connection) for i, o in
                                         downsample_layer_list[:num_downsample_layer]
                                        ])
         # Down sampling layers for the contracting path
         self.down_sample = nn.ModuleList([DownSample() for _ in range(4)])
 
         # The two convolution layers at the lowest resolution (the bottom of the U).
-        self.middle_conv = DoubleConvolution(base_channels * 2**(num_downsample_layer-1), base_channels * 2**(num_downsample_layer))
+        self.middle_conv = DoubleConvolution(base_channels * 2**(num_downsample_layer-1), base_channels * 2**(num_downsample_layer), uses_skip_connection = self.uses_skip_connection)
 
         # Up sampling layers for the expansive path.
         # The number of features is halved with up-sampling.
@@ -157,7 +174,7 @@ class UNet(nn.Module):
         # Their input is the concatenation of the current feature map and the feature map from the
         # contracting path. Therefore, the number of input features is double the number of features
         # from up-sampling.
-        self.up_conv = nn.ModuleList([DoubleConvolution(i, o) for i, o in
+        self.up_conv = nn.ModuleList([DoubleConvolution(i, o, uses_skip_connection = self.uses_skip_connection) for i, o in
                                       upsample_layer_list[num_upsample_layer:]
                                      ])
         # Crop and concatenate layers for the expansive path.

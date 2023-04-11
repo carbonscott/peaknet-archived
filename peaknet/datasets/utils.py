@@ -2,7 +2,6 @@
 # -*- coding: utf-8 -*-
 
 import numpy as np
-import psana
 
 class PsanaImg:
     """
@@ -11,6 +10,8 @@ class PsanaImg:
     """
 
     def __init__(self, exp, run, mode, detector_name):
+        import psana
+
         # Biolerplate code to access an image
         # Set up data source
         self.datasource_id = f"exp={exp}:run={run}:{mode}"

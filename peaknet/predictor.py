@@ -1,9 +1,11 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
-import torch
 import pickle
 import cupy as cp
+
+import torch
+import torch.nn.functional as F
 
 from math import isnan
 from cupyx.scipy import ndimage
@@ -198,6 +200,52 @@ class CheetahPeakFinder:
                 idx_panel = int(idx_panel)
 
                 y, x = coord_crop_to_img((y, x), img_stack.shape[-2:], mask_stack_predicted.shape[-2:])
+
+                x_min, y_min, x_max, y_max = self.cheetah_geom_list[idx_panel]
+
+                x += x_min
+                y += y_min
+
+                peak_list.append((y, x))
+
+        return peak_list
+
+
+    def find_peak_att(self, img_stack, min_num_peaks = 15):
+        peak_list = []
+
+        # Normalize the image stack...
+        img_stack = (img_stack - img_stack.mean(axis = (-1, -2), keepdim = True)) / img_stack.std(axis = (-1, -2), keepdim = True)
+
+        # Get activation feature map given the image stack...
+        self.model.eval()
+        with torch.no_grad():
+            fmap_stack = self.model.forward(img_stack)
+
+        # Convert to probability with the softmax function...
+        mask_stack_predicted = fmap_stack.softmax(dim = 1)
+
+        B, C, H, W = mask_stack_predicted.shape
+        mask_stack_predicted = mask_stack_predicted.argmax(dim = 1, keepdims = True)
+        mask_stack_predicted = F.one_hot(mask_stack_predicted.reshape(B, -1), num_classes = C).permute(0, 2, 1).reshape(B, -1, H, W)
+        label_predicted = mask_stack_predicted[:, 1]
+        label_predicted = label_predicted.to(torch.int)
+
+        # Find center of mass for each image in the stack...
+        num_stack, size_y, size_x = label_predicted.shape
+        peak_pos_predicted_stack = self.calc_batch_center_of_mass(label_predicted.view(num_stack, size_y, size_x))
+
+        # A workaround to avoid copying gpu memory to cpu when num of peaks is small...
+        if len(peak_pos_predicted_stack) >= min_num_peaks:
+            # Convert to cheetah coordinates...
+            for peak_pos in peak_pos_predicted_stack:
+                idx_panel, y, x = peak_pos.get()
+
+                if isnan(y) or isnan(x): continue
+
+                idx_panel = int(idx_panel)
+
+                y, x = coord_crop_to_img((y, x), img_stack.shape[-2:], label_predicted.shape[-2:])
 
                 x_min, y_min, x_max, y_max = self.cheetah_geom_list[idx_panel]
 

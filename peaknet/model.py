@@ -57,7 +57,7 @@ class PeakFinderModel(nn.Module):
             DRCCHKPT         = "chkpts"
             prefixpath_chkpt = os.path.join(drc_cwd, DRCCHKPT)
             path_chkpt_prev  = os.path.join(prefixpath_chkpt, fl_chkpt)
-            self.load_state_dict(torch.load(path_chkpt_prev))
+            self.load_state_dict(torch.load(path_chkpt_prev), strict = False)
 
 
     def forward(self, batch_img, batch_mask):

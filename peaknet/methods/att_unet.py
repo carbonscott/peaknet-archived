@@ -34,7 +34,8 @@ class DoubleConv(nn.Module):
         out = self.conv2(out)
 
         if self.uses_skip_connection:
-            out += self.res(x)
+            # Do not use out += as it's an 'in-place' operation
+            out = out + self.res(x)
 
         return out
 

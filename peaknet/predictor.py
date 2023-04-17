@@ -211,7 +211,7 @@ class CheetahPeakFinder:
         return peak_list
 
 
-    def find_peak_att(self, img_stack, min_num_peaks = 15):
+    def find_peak_w_softmax(self, img_stack, min_num_peaks = 15):
         peak_list = []
 
         # Normalize the image stack...

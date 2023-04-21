@@ -1,0 +1,25 @@
+# ___/ PeakNet model \___
+timestamp            : "2023_0418_2233_14"
+epoch                : 143
+tag                  : ".cpu"
+uses_skip_connection : True
+
+# ___/ Experimental data \___
+# Psana...
+exp           : "mfx13016"
+run           : 36
+img_load_mode : "calib"
+access_mode   : "idx"
+detector_name : "Rayonix"
+photon_energy : 9.28e3
+encoder_value : 0
+
+# Data range...
+event_min : 0
+event_max : null
+
+# ___/ Output \___
+dir_results : "results"
+
+# ___/ Misc \___
+path_cheetah_geom : 'cheetah_geom.pickle'

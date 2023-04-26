@@ -105,7 +105,7 @@ class SFXMulticlassDataset(Dataset):
             self.mpi_rank     = self.mpi_comm.Get_rank()
             self.mpi_data_tag = 11
 
-        self.idx_sample_list    = self.build_dataset()
+        self.idx_sample_list = self.build_dataset()
         self.dataset_cache_dict = {}
 
         return None

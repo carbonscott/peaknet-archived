@@ -26,12 +26,10 @@ def set_seed(seed):
 
 class EpochManager:
 
-    def __init__(self, trainer, validator, saves_checkpoint = True):
+    def __init__(self, trainer, validator):
 
         self.trainer   = trainer
         self.validator = validator
-
-        self.saves_checkpoint = saves_checkpoint
 
         # Track model training information
         self.param_update_ratio_dict  = {}
@@ -75,7 +73,7 @@ class EpochManager:
         self.model_named_gradients = [ (name, param.grad) for name, param in self.trainer.model.named_parameters() ]
 
 
-    def run_one_epoch(self, epoch, returns_loss = False, logs_batch_loss = False):
+    def run_one_epoch(self, epoch, returns_loss = False, logs_batch_loss = False, saves_checkpoint = True):
         # Run one epoch of training...
         loss_train = self.trainer.train(epoch = epoch, returns_loss = True, logs_batch_loss = logs_batch_loss)
 
@@ -88,7 +86,7 @@ class EpochManager:
         # Save checkpoint whenever validation loss gets smaller...
         # Notice it doesn't imply early stopping
         if loss_validate < self.loss_min:
-            if self.save_checkpoint:
+            if saves_checkpoint:
                 # Save a checkpoint file...
                 self.trainer.save_checkpoint(epoch = epoch)
 

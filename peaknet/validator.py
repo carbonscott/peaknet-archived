@@ -76,6 +76,7 @@ class LossValidator:
 
             with torch.no_grad():
                 _, _, loss = self.model.forward(batch_img, batch_mask)
+                loss = loss.mean() # collapse all losses if they are scattered on multiple gpus
                 loss_val = loss.cpu().detach().numpy()
                 losses_batch.append(loss_val)
 

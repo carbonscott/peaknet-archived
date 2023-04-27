@@ -88,6 +88,7 @@ class Trainer:
             batch_mask = batch_mask.to(self.device, dtype=torch.float)
 
             _, _, loss = self.model.forward(batch_img, batch_mask)
+            loss = loss.mean() # collapse all losses if they are scattered on multiple gpus
 
             optimizer.zero_grad()
             loss.backward()

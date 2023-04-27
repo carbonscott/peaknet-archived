@@ -82,7 +82,7 @@ class LossValidator:
 
             with torch.no_grad():
                 if config.uses_mixed_precision:
-                    with autocast():
+                    with autocast(device_type='cuda', dtype=torch.float16):
                         _, _, loss = self.model.forward(batch_img, batch_mask)
                         loss = loss.mean() # collapse all losses if they are scattered on multiple gpus
                 else:

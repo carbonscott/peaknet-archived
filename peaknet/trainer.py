@@ -42,6 +42,7 @@ class Trainer:
         self.model  = torch.nn.DataParallel(self.model).to(self.device)
 
         if config.uses_mixed_precision:
+            print("Uses mixed precision")
             from torch.cuda.amp import autocast, GradScaler
 
         return None
@@ -94,7 +95,7 @@ class Trainer:
             batch_mask = batch_mask.to(self.device, dtype=torch.float)
 
             if config.uses_mixed_precision:
-                with autocast():
+                with autocast(device_type='cuda', dtype=torch.float16):
                     _, _, loss = self.model.forward(batch_img, batch_mask)
                     loss = loss.mean() # collapse all losses if they are scattered on multiple gpus
 

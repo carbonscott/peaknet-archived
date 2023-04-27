@@ -83,9 +83,9 @@ class LossValidator:
             losses_epoch.append(loss_batch_mean)
 
             if logs_batch_loss:
-                logger.info(f"MSG - epoch {epoch}, batch {step_id:d}, loss {loss_batch_mean:.8f}")
+                logger.info(f"MSG (gpu:{self.device}) - epoch {epoch}, batch {step_id:d}, loss {loss_batch_mean:.8f}")
 
         loss_epoch_mean = np.mean(losses_epoch)
-        logger.info(f"MSG - epoch {epoch}, loss mean {loss_epoch_mean:.8f}")
+        logger.info(f"MSG (gpu:{self.device}) - epoch {epoch}, loss mean {loss_epoch_mean:.8f}")
 
         return loss_epoch_mean if returns_loss else None

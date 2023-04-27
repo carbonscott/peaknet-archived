@@ -59,7 +59,7 @@ class Trainer:
 
         # Hmmm, DataParallel wrappers keep raw model object in .module attribute
         model = self.model.module if hasattr(self.model, "module") else self.model
-        logger.info(f"SAVE - {path_chkpt}")
+        logger.info(f"SAVE (gpu:{self.device}) - {path_chkpt}")
         torch.save(model.state_dict(), path_chkpt)
 
 
@@ -97,9 +97,9 @@ class Trainer:
             losses_epoch.append(loss_val)
 
             if logs_batch_loss:
-                logger.info(f"MSG - epoch {epoch}, batch {idx_batch:d}, loss {loss_val:.8f}")
+                logger.info(f"MSG (gpu:{self.device}) - epoch {epoch}, batch {idx_batch:d}, loss {loss_val:.8f}")
 
         loss_epoch_mean = np.mean(losses_epoch)
-        logger.info(f"MSG - epoch {epoch}, loss mean {loss_epoch_mean:.8f}")
+        logger.info(f"MSG (gpu:{self.device}) - epoch {epoch}, loss mean {loss_epoch_mean:.8f}")
 
         return loss_epoch_mean if returns_loss else None

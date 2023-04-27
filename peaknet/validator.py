@@ -7,6 +7,7 @@ import tqdm
 import numpy as np
 
 from torch.utils.data.dataloader import DataLoader
+from torch.cuda.amp import autocast, GradScaler
 
 logger = logging.getLogger(__name__)
 
@@ -45,9 +46,6 @@ class LossValidator:
             self.model.load_state_dict(chkpt)
         self.model = torch.nn.DataParallel(self.model).to(self.device)
 
-        if config.uses_mixed_precision:
-            from torch.cuda.amp import autocast, GradScaler
-
         return None
 
 
@@ -82,7 +80,7 @@ class LossValidator:
 
             with torch.no_grad():
                 if config.uses_mixed_precision:
-                    with autocast(device_type='cuda', dtype=torch.float16):
+                    with autocast():
                         _, _, loss = self.model.forward(batch_img, batch_mask)
                         loss = loss.mean() # collapse all losses if they are scattered on multiple gpus
                 else:

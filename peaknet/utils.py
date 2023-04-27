@@ -26,10 +26,11 @@ def set_seed(seed):
 
 class EpochManager:
 
-    def __init__(self, trainer, validator):
+    def __init__(self, trainer, validator, device = 0):
 
         self.trainer   = trainer
         self.validator = validator
+        self.device  = device    # 0 if only one gpu is used.
 
         # Track model training information
         self.param_update_ratio_dict  = {}
@@ -86,8 +87,9 @@ class EpochManager:
         # Save checkpoint whenever validation loss gets smaller...
         # Notice it doesn't imply early stopping
         if loss_validate < self.loss_min:
-            # Save a checkpoint file...
-            self.trainer.save_checkpoint(epoch = epoch)
+            if self.device == 0:
+                # Save a checkpoint file...
+                self.trainer.save_checkpoint(epoch = epoch)
 
             # Update the new loss...
             self.loss_min = loss_validate

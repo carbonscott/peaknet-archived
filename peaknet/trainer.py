@@ -41,6 +41,9 @@ class Trainer:
             self.device = torch.cuda.current_device()
         self.model  = torch.nn.DataParallel(self.model).to(self.device)
 
+        if config.uses_mixed_precision:
+            from torch.cuda.amp import autocast, GradScaler
+
         return None
 
 
@@ -70,6 +73,9 @@ class Trainer:
         model_raw           = model.module if hasattr(model, "module") else model
         optimizer           = model_raw.configure_optimizers(config)
 
+        if config.uses_mixed_precision:
+            scaler = GradScaler()
+
         # Train an epoch...
         model.train()
         dataset_train = self.dataset_train
@@ -87,14 +93,24 @@ class Trainer:
             batch_img  = batch_img.to (self.device, dtype=torch.float)
             batch_mask = batch_mask.to(self.device, dtype=torch.float)
 
-            _, _, loss = self.model.forward(batch_img, batch_mask)
-            loss = loss.mean() # collapse all losses if they are scattered on multiple gpus
+            if config.uses_mixed_precision:
+                with autocast():
+                    _, _, loss = self.model.forward(batch_img, batch_mask)
+                    loss = loss.mean() # collapse all losses if they are scattered on multiple gpus
 
-            optimizer.zero_grad()
-            loss.backward()
-            optimizer.step()
+                optimizer.zero_grad()
+                scaler.scale(loss).backward()
+                scaler.step(optimizer)
+                scaler.update()
+            else:
+                _, _, loss = self.model.forward(batch_img, batch_mask)
+                loss = loss.mean() # collapse all losses if they are scattered on multiple gpus
 
-            loss_val = loss.cpu().detach().numpy()
+                optimizer.zero_grad()
+                loss.backward()
+                optimizer.step()
+
+            loss_val = loss.item()
             losses_epoch.append(loss_val)
 
             if logs_batch_loss:

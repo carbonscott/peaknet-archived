@@ -45,6 +45,9 @@ class LossValidator:
             self.model.load_state_dict(chkpt)
         self.model = torch.nn.DataParallel(self.model).to(self.device)
 
+        if config.uses_mixed_precision:
+            from torch.cuda.amp import autocast, GradScaler
+
         return None
 
 
@@ -53,6 +56,9 @@ class LossValidator:
 
         # Load model and testing configuration...
         model, config = self.model, self.config
+
+        if config.uses_mixed_precision:
+            scaler = GradScaler()
 
         # Validate an epoch...
         # Load model state...
@@ -75,9 +81,15 @@ class LossValidator:
             batch_mask = batch_mask.to(self.device, dtype=torch.float)
 
             with torch.no_grad():
-                _, _, loss = self.model.forward(batch_img, batch_mask)
-                loss = loss.mean() # collapse all losses if they are scattered on multiple gpus
-                loss_val = loss.cpu().detach().numpy()
+                if config.uses_mixed_precision:
+                    with autocast():
+                        _, _, loss = self.model.forward(batch_img, batch_mask)
+                        loss = loss.mean() # collapse all losses if they are scattered on multiple gpus
+                else:
+                    _, _, loss = self.model.forward(batch_img, batch_mask)
+                    loss = loss.mean() # collapse all losses if they are scattered on multiple gpus
+
+                loss_val = loss.item()
                 losses_batch.append(loss_val)
 
             loss_batch_mean = np.mean(losses_batch)

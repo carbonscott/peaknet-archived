@@ -19,20 +19,30 @@ from peaknet.aug import RandomShift,  \
                         RandomRotate, \
                         RandomPatch
 
-torch.autograd.set_detect_anomaly(True)
+torch.autograd.set_detect_anomaly(False)
 
-timestamp_prev = "2023_0416_0011_17"
-epoch = 172
+## timestamp_prev = "2023_0425_2349_15"
+## epoch = 161
+## timestamp_prev = "2023_0426_2111_50"
+## epoch = 7
+## timestamp_prev = "2023_0426_2225_04"
+## epoch = 250
+timestamp_prev = None
+epoch = None
 fl_chkpt = None if timestamp_prev is None else f"{timestamp_prev}.epoch_{epoch}.chkpt"
 
 
 # Set up parameters for an experiment...
 drc_dataset  = 'datasets'
 ## fl_dataset   = 'mfx13016.0028.npy'
-fl_dataset   = 'mfx13016_0028+mfxp22820_0013.data.npy'
+## fl_dataset   = 'mfx13016_0028+mfxp22820_0013.data.npy'
+## fl_dataset   = 'mfx13016_0028_N68+mfxp22820_0013_N37.data.npy'
+## fl_dataset   = 'mfx13016_0028_N68+mfxp22820_0013_N37+mfx13016_0028_N63_low_photon.data.npy'
+## fl_dataset   = 'mfx13016_0028_N68+mfxp22820_0013_N37+mfx13016_0028_N63_low_photon.68v20v20.data.npy'    # size_sample = 2400
+fl_dataset   = 'mfx13016_0028_N68+mfxp22820_0013_N37+mfx13016_0028_N63_low_photon.68v37v30.data.npy'       # size_sample = 3000
 path_dataset = os.path.join(drc_dataset, fl_dataset)
 
-size_sample   = 2000
+size_sample   = 3000
 ## size_sample   = 20    # Quick check if the program runs
 frac_train    = 0.8
 frac_validate = 1.0
@@ -44,8 +54,8 @@ base_channels = 8
 focal_alpha   = 1.2 * 10**(0)
 focal_gamma   = 2 * 10**(0)
 
-size_batch  = 8
-num_workers = 4
+size_batch  = 10 * 3
+num_workers = 12
 lr          = 10**(-4.25)
 seed        = 0
 
@@ -140,7 +150,8 @@ config_train = ConfigTrainer( timestamp    = timestamp,
                               pin_memory   = True,
                               shuffle      = False,
                               tqdm_disable = False,
-                              lr           = lr, )
+                              lr           = lr,
+                              uses_mixed_precision = True, )
 
 # Training...
 trainer = Trainer(model, dataset_train, config_train)
@@ -152,7 +163,8 @@ config_validator = ConfigValidator( num_workers  = num_workers,
                                     pin_memory   = True,
                                     shuffle      = False,
                                     tqdm_disable = False,
-                                    lr           = lr, )
+                                    lr           = lr,
+                                    uses_mixed_precision = True, )
 validator = LossValidator(model, dataset_validate, config_validator)
 
 

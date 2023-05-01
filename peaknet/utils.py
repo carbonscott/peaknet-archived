@@ -26,7 +26,7 @@ def set_seed(seed):
 
 class EpochManager:
 
-    def __init__(self, trainer, validator):
+    def __init__(self, trainer, validator, loss_min_prev = None):
 
         self.trainer   = trainer
         self.validator = validator
@@ -39,7 +39,7 @@ class EpochManager:
         self.model_named_gradients    = []
 
         # Track state variable
-        self.loss_min = float('inf')
+        self.loss_min = float('inf') if loss_min_prev is None else loss_min_prev
 
         return None
 
